@@ -1,0 +1,34 @@
+/*
+ * Exemple lexical flex (référence Vicinity Mongo DSL).
+ * Renomme en mongo-dsl.l après `bison -d mongo-dsl.y`
+ * puis : flex mongo-dsl.l
+ */
+
+%option noyywrap
+
+%{
+#include "mongo-dsl.tab.h"
+%}
+
+%%
+
+[ \t\r\n]+
+
+FIND       { return FIND; }
+WHERE      { return WHERE; }
+EQ         { return EQ; }
+LIMIT      { return LIMIT; }
+
+find       { return FIND; }
+where      { return WHERE; }
+eq         { return EQ; }
+limit      { return LIMIT; }
+
+\"([^\\\"]|\\\\.)*\"   { return STRING; }
+\'([^\\']|\\.)*\'       { return STRING; }
+
+-?[0-9]+               { return NUMBER; }
+
+[A-Za-z_][A-Za-z0-9_]* { return IDENT; }
+
+%%

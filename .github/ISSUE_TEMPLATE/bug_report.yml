@@ -1,0 +1,27 @@
+name: Bug report
+description: Signaler un comportement incorrect
+labels: ["bug", "triage"]
+body:
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: Que s'est-il passé ?
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Étapes pour reproduire
+    validations:
+      required: true
+  - type: input
+    id: env
+    attributes:
+      label: Environnement
+    validations:
+      required: true
+  - type: textarea
+    id: logs
+    attributes:
+      label: Logs / captures
+      render: shell

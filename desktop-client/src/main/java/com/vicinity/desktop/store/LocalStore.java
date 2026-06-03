@@ -1,0 +1,178 @@
+package com.vicinity.desktop.store;
+
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.vicinity.desktop.api.dto.MeResponse;
+import com.vicinity.desktop.api.dto.Neighbourhood;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.sql.Connection;
+import java.sql.DriverManager;
+import java.sql.PreparedStatement;
+import java.sql.ResultSet;
+import java.sql.SQLException;
+import java.sql.Statement;
+import java.time.Instant;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Optional;
+
+public final class LocalStore {
+
+    private static final ObjectMapper MAPPER = new ObjectMapper();
+    private static volatile String jdbcUrl;
+
+    private LocalStore() {}
+
+    public static synchronized void init() throws SQLException {
+        if (jdbcUrl != null) {
+            return;
+        }
+        final Path dir = Path.of(System.getProperty("user.home"), ".vicinity", "data");
+        try {
+            Files.createDirectories(dir);
+        } catch (java.io.IOException e) {
+            throw new SQLException("Impossible de créer " + dir, e);
+        }
+        jdbcUrl = "jdbc:h2:" + dir.resolve("vicinity-desktop").toAbsolutePath();
+        try (Connection conn = connection(); Statement st = conn.createStatement()) {
+            st.execute(
+                    """
+                    CREATE TABLE IF NOT EXISTS app_session (
+                      id INT PRIMARY KEY,
+                      access_token CLOB NOT NULL,
+                      refresh_token CLOB,
+                      user_json CLOB NOT NULL,
+                      updated_at TIMESTAMP NOT NULL
+                    )
+                    """);
+            st.execute(
+                    """
+                    CREATE TABLE IF NOT EXISTS neighbourhoods_cache (
+                      id VARCHAR(36) PRIMARY KEY,
+                      name VARCHAR(200) NOT NULL,
+                      description CLOB,
+                      payload_json CLOB NOT NULL,
+                      synced_at TIMESTAMP NOT NULL
+                    )
+                    """);
+        }
+    }
+
+    public static void saveSession(
+            final String accessToken, final String refreshToken, final MeResponse user) {
+        try (Connection conn = connection();
+                PreparedStatement ps =
+                        conn.prepareStatement(
+                                """
+                                MERGE INTO app_session (id, access_token, refresh_token, user_json, updated_at)
+                                KEY (id)
+                                VALUES (1, ?, ?, ?, CURRENT_TIMESTAMP)
+                                """)) {
+            ps.setString(1, accessToken);
+            ps.setString(2, refreshToken);
+            ps.setString(3, MAPPER.writeValueAsString(user));
+            ps.executeUpdate();
+        } catch (Exception e) {
+            throw new IllegalStateException("Impossible de sauvegarder la session", e);
+        }
+    }
+
+    public static PersistedSession loadSession() {
+        try (Connection conn = connection();
+                PreparedStatement ps =
+                        conn.prepareStatement(
+                                "SELECT access_token, refresh_token, user_json FROM app_session WHERE id = 1");
+                ResultSet rs = ps.executeQuery()) {
+            if (!rs.next()) {
+                return null;
+            }
+            final MeResponse user = MAPPER.readValue(rs.getString("user_json"), MeResponse.class);
+            return new PersistedSession(
+                    rs.getString("access_token"),
+                    rs.getString("refresh_token"),
+                    user);
+        } catch (Exception e) {
+            return null;
+        }
+    }
+
+    public static void clearSession() {
+        try (Connection conn = connection();
+                Statement st = conn.createStatement()) {
+            st.executeUpdate("DELETE FROM app_session");
+        } catch (SQLException e) {
+            throw new IllegalStateException("Impossible d'effacer la session", e);
+        }
+    }
+
+    public static void replaceNeighbourhoods(final List<Neighbourhood> items) {
+        try (Connection conn = connection()) {
+            conn.setAutoCommit(false);
+            try (Statement clear = conn.createStatement()) {
+                clear.executeUpdate("DELETE FROM neighbourhoods_cache");
+            }
+            try (PreparedStatement ps =
+                    conn.prepareStatement(
+                            """
+                            INSERT INTO neighbourhoods_cache
+                              (id, name, description, payload_json, synced_at)
+                            VALUES (?, ?, ?, ?, CURRENT_TIMESTAMP)
+                            """)) {
+                for (final Neighbourhood n : items) {
+                    ps.setString(1, n.id());
+                    ps.setString(2, n.name());
+                    ps.setString(3, n.description());
+                    ps.setString(4, MAPPER.writeValueAsString(n));
+                    ps.addBatch();
+                }
+                ps.executeBatch();
+            }
+            conn.commit();
+        } catch (Exception e) {
+            throw new IllegalStateException("Impossible de mettre en cache les quartiers", e);
+        }
+    }
+
+    public static List<Neighbourhood> loadNeighbourhoods() {
+        final List<Neighbourhood> out = new ArrayList<>();
+        try (Connection conn = connection();
+                PreparedStatement ps =
+                        conn.prepareStatement(
+                                """
+                                SELECT payload_json FROM neighbourhoods_cache
+                                ORDER BY name
+                                """);
+                ResultSet rs = ps.executeQuery()) {
+            while (rs.next()) {
+                out.add(MAPPER.readValue(rs.getString("payload_json"), Neighbourhood.class));
+            }
+        } catch (Exception e) {
+            throw new IllegalStateException("Impossible de lire le cache quartiers", e);
+        }
+        return out;
+    }
+
+    public static Optional<Instant> lastNeighbourhoodSync() {
+        try (Connection conn = connection();
+                PreparedStatement ps =
+                        conn.prepareStatement(
+                                "SELECT MAX(synced_at) AS t FROM neighbourhoods_cache");
+                ResultSet rs = ps.executeQuery()) {
+            if (rs.next() && rs.getTimestamp("t") != null) {
+                return Optional.of(rs.getTimestamp("t").toInstant());
+            }
+        } catch (SQLException e) {
+            throw new IllegalStateException(e);
+        }
+        return Optional.empty();
+    }
+
+    private static Connection connection() throws SQLException {
+        if (jdbcUrl == null) {
+            throw new IllegalStateException("LocalStore.init() non appelé");
+        }
+        return DriverManager.getConnection(jdbcUrl, "sa", "");
+    }
+
+    public record PersistedSession(String accessToken, String refreshToken, MeResponse user) {}
+}

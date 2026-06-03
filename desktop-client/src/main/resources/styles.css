@@ -1,0 +1,65 @@
+.root {
+    -fx-font-family: "Segoe UI", "Ubuntu", sans-serif;
+    -fx-font-size: 13px;
+    -fx-background-color: #f4f6f8;
+}
+
+.label-title {
+    -fx-font-size: 18px;
+    -fx-font-weight: bold;
+}
+
+.label-muted {
+    -fx-text-fill: #5c6570;
+}
+
+.label-error {
+    -fx-text-fill: #b42318;
+}
+
+.label-success {
+    -fx-text-fill: #027a48;
+}
+
+.button-primary {
+    -fx-background-color: #1d4ed8;
+    -fx-text-fill: white;
+    -fx-padding: 8 16 8 16;
+    -fx-background-radius: 6;
+}
+
+.button-primary:hover {
+    -fx-background-color: #1e40af;
+}
+
+.button-secondary {
+    -fx-background-color: #e2e8f0;
+    -fx-text-fill: #0f172a;
+    -fx-padding: 8 16 8 16;
+    -fx-background-radius: 6;
+}
+
+.toolbar {
+    -fx-background-color: white;
+    -fx-border-color: #e2e8f0;
+    -fx-border-width: 0 0 1 0;
+    -fx-padding: 10 16 10 16;
+    -fx-spacing: 12;
+}
+
+.panel {
+    -fx-background-color: white;
+    -fx-background-radius: 8;
+    -fx-border-color: #e2e8f0;
+    -fx-border-radius: 8;
+    -fx-padding: 16;
+}
+
+.text-area-mono {
+    -fx-font-family: "Consolas", "DejaVu Sans Mono", monospace;
+    -fx-font-size: 12px;
+}
+
+.table-view {
+    -fx-background-color: transparent;
+}

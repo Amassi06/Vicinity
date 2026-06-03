@@ -1,0 +1,132 @@
+// Connected Neighbours — schéma Prisma initial.
+// Conventions :
+//  - Toutes les PK : UUID v4 généré par pgcrypto.
+//  - Timestamps en UTC, gérés par PostgreSQL.
+//  - Les polygones de quartier (PostGIS) sont déclarés en Unsupported,
+//    requêtes spatiales via prisma.$queryRaw (cf. Épice 6).
+
+generator client {
+  provider        = "prisma-client-js"
+  previewFeatures = ["postgresqlExtensions"]
+}
+
+datasource db {
+  provider   = "postgresql"
+  url        = env("DATABASE_URL")
+  extensions = [postgis, uuidOssp(map: "uuid-ossp"), pgcrypto, citext]
+}
+
+enum UserRole {
+  HABITANT
+  MODERATOR
+  ADMIN
+}
+
+enum UserStatus {
+  ACTIVE
+  PENDING
+  SUSPENDED
+  DELETED
+}
+
+model User {
+  id            String     @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  email         String     @unique @db.Citext
+  passwordHash  String     @map("password_hash")
+  displayName   String     @map("display_name")
+  role          UserRole   @default(HABITANT)
+  status        UserStatus @default(PENDING)
+  mfaSecret     String?    @map("mfa_secret")
+  mfaEnabled    Boolean    @default(false) @map("mfa_enabled")
+  pointsBalance Int        @default(0) @map("points_balance")
+  createdAt     DateTime   @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt     DateTime   @updatedAt @map("updated_at") @db.Timestamptz
+  deletedAt     DateTime?  @map("deleted_at") @db.Timestamptz
+
+  sessions        Session[]
+  auditEntries    AuditLog[]
+  neighbourhood   Neighbourhood? @relation(fields: [neighbourhoodId], references: [id])
+  neighbourhoodId String?        @map("neighbourhood_id") @db.Uuid
+
+  @@index([neighbourhoodId])
+  @@map("users")
+}
+
+model Session {
+  id               String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  user             User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  userId           String   @map("user_id") @db.Uuid
+  refreshTokenHash String   @unique @map("refresh_token_hash")
+  userAgent        String?  @map("user_agent")
+  ipAddress        String?  @map("ip_address")
+  expiresAt        DateTime @map("expires_at") @db.Timestamptz
+  revokedAt        DateTime? @map("revoked_at") @db.Timestamptz
+  createdAt        DateTime @default(now()) @map("created_at") @db.Timestamptz
+
+  @@index([userId])
+  @@map("sessions")
+}
+
+model Neighbourhood {
+  id          String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  name        String   @unique
+  description String?
+  boundary    Unsupported("geometry(Polygon, 4326)")
+  createdAt   DateTime @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt   DateTime @updatedAt @map("updated_at") @db.Timestamptz
+
+  users User[]
+
+  @@map("neighbourhoods")
+}
+
+enum AuditAction {
+  LOGIN
+  LOGOUT
+  EXPORT_DATA
+  DELETE_ACCOUNT
+  UPDATE_PROFILE
+  SIGN_DOCUMENT
+  CONSENT_GIVEN
+  CONSENT_REVOKED
+}
+
+enum PointTxReason {
+  WELCOME_BONUS
+  SERVICE_PAYMENT
+  SERVICE_PAYOUT
+  ADMIN_ADJUSTMENT
+  REFUND
+}
+
+model PointTransaction {
+  id          String        @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  fromUserId  String?       @map("from_user_id") @db.Uuid
+  toUserId    String?       @map("to_user_id") @db.Uuid
+  amount      Int
+  reason      PointTxReason
+  listingId   String?       @map("listing_id")
+  contractId  String?       @map("contract_id")
+  createdAt   DateTime      @default(now()) @map("created_at") @db.Timestamptz
+
+  @@index([fromUserId])
+  @@index([toUserId])
+  @@index([listingId])
+  @@index([createdAt])
+  @@map("point_transactions")
+}
+
+model AuditLog {
+  id        String      @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  user      User?       @relation(fields: [userId], references: [id], onDelete: SetNull)
+  userId    String?     @map("user_id") @db.Uuid
+  action    AuditAction
+  metadata  Json?       @db.JsonB
+  ipAddress String?     @map("ip_address")
+  createdAt DateTime    @default(now()) @map("created_at") @db.Timestamptz
+
+  @@index([userId])
+  @@index([action])
+  @@index([createdAt])
+  @@map("audit_logs")
+}
