@@ -1,6 +1,7 @@
 plugins {
     application
     id("org.openjfx.javafxplugin") version "0.1.0"
+    id("com.gradleup.shadow") version "8.3.5"
 }
 
 repositories {
@@ -40,4 +41,11 @@ tasks.withType<JavaCompile>().configureEach {
 
 tasks.named<JavaExec>("run") {
     standardInput = System.`in`
+}
+
+tasks.shadowJar {
+    manifest {
+        attributes["Main-Class"] = "com.vicinity.desktop.VicinityApp"
+    }
+    archiveClassifier.set("")
 }

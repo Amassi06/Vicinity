@@ -134,3 +134,32 @@ export async function recommendEvents(input: {
     await session.close();
   }
 }
+
+/**
+ * "Amis" d'un utilisateur : voisins avec qui il partage au moins un centre
+ * d'intérêt (co-intéressés au même événement). Sert à mettre en avant les amis
+ * intéressés par un événement côté habitant.
+ */
+export async function friendsOf(userId: string): Promise<string[]> {
+  const session = neo4jSession();
+  try {
+    const result = await session.run(
+      `
+      MATCH (u:User {id: $uid})-[:INTERESTED_IN]->(seed:Event)<-[:INTERESTED_IN]-(friend:User)
+      WHERE friend.id <> $uid
+      RETURN DISTINCT friend.id AS id
+      `,
+      { uid: userId },
+    );
+    const ids: string[] = [];
+    for (const row of result.records) {
+      const raw: unknown = row.get('id');
+      if (typeof raw === 'string' && raw.length > 0) ids.push(raw);
+    }
+    return ids;
+  } catch {
+    return [];
+  } finally {
+    await session.close();
+  }
+}

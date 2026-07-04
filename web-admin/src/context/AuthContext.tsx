@@ -20,11 +20,13 @@ import {
 
 type MePayload = AuthUser & { mfa?: boolean };
 
+/** Espace admin : seuls les rôles staff peuvent ouvrir une session ici. */
+const STAFF_ROLES = ['ADMIN', 'MODERATOR'];
+
 type AuthContextValue = {
   ready: boolean;
   user: AuthUser | null;
-  login: (email: string, password: string) => Promise<void>;
-  register: (email: string, password: string, displayName: string) => Promise<void>;
+  login: (email: string, password: string, mfaToken?: string) => Promise<void>;
   logout: () => Promise<void>;
 };
 
@@ -42,7 +44,12 @@ export function AuthProvider({ children }: { children: ReactNode }): ReactElemen
     }
     try {
       const me = await apiFetch<MePayload>('/auth/me');
-      setUser({ sub: me.sub, email: me.email, role: me.role });
+      if (!STAFF_ROLES.includes(me.role)) {
+        clearStored();
+        setUser(null);
+      } else {
+        setUser({ sub: me.sub, email: me.email, role: me.role });
+      }
     } catch {
       clearStored();
       setUser(null);
@@ -62,24 +69,14 @@ export function AuthProvider({ children }: { children: ReactNode }): ReactElemen
     return () => window.removeEventListener('focus', onFocus);
   }, [hydrate]);
 
-  const login = useCallback(async (email: string, password: string) => {
-    const r = await authPostJson<AuthTokensResponse>('/auth/login', { email, password });
+  const login = useCallback(async (email: string, password: string, mfaToken?: string) => {
+    const r = await authPostJson<AuthTokensResponse>('/auth/login', { email, password, mfaToken });
+    if (!STAFF_ROLES.includes(r.user.role)) {
+      throw new Error('forbidden_role');
+    }
     persistTokens(r.accessToken, r.refreshToken);
     setUser({ sub: r.user.id, email: r.user.email, role: r.user.role });
   }, []);
-
-  const register = useCallback(
-    async (email: string, password: string, displayName: string) => {
-      const r = await authPostJson<AuthTokensResponse>('/auth/signup', {
-        email,
-        password,
-        displayName,
-      });
-      persistTokens(r.accessToken, r.refreshToken);
-      setUser({ sub: r.user.id, email: r.user.email, role: r.user.role });
-    },
-    [],
-  );
 
   const logoutCb = useCallback(async () => {
     const rt = sessionStorage.getItem('vicinity_refresh');
@@ -103,10 +100,9 @@ export function AuthProvider({ children }: { children: ReactNode }): ReactElemen
       ready,
       user,
       login,
-      register,
       logout: logoutCb,
     }),
-    [ready, user, login, register, logoutCb],
+    [ready, user, login, logoutCb],
   );
 
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;

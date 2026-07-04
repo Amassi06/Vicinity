@@ -1,5 +1,8 @@
 import { useState, type ReactElement } from 'react';
 import { apiFetch } from '../lib/api.js';
+import { Button } from '@/components/ui/button.js';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card.js';
+import { Alert, AlertDescription } from '@/components/ui/alert.js';
 
 export function SsoPage(): ReactElement {
   const [token, setToken] = useState<string | null>(null);
@@ -16,18 +19,26 @@ export function SsoPage(): ReactElement {
   }
 
   return (
-    <section className="panel">
-      <h1 style={{ marginTop: 0 }}>SSO client bureau</h1>
-      <p className="muted">Émet un jeton court pour le client JavaFX (5 min).</p>
-      <button type="button" className="primary" onClick={() => void issue()}>
-        Émettre un jeton SSO
-      </button>
-      {token ? (
-        <pre className="code-out" style={{ userSelect: 'all' }}>
-          {token}
-        </pre>
-      ) : null}
-      {err ? <p className="error-msg">{err}</p> : null}
-    </section>
+    <Card className="mx-auto mt-6 max-w-2xl">
+      <CardHeader>
+        <CardTitle className="text-xl">SSO client bureau</CardTitle>
+      </CardHeader>
+      <CardContent className="space-y-4">
+        <p className="text-muted-foreground">Émet un jeton court pour le client JavaFX (5 min).</p>
+        <Button type="button" onClick={() => void issue()}>
+          Émettre un jeton SSO
+        </Button>
+        {token ? (
+          <pre className="select-all overflow-auto rounded-md border border-border bg-muted p-3 font-mono text-xs">
+            {token}
+          </pre>
+        ) : null}
+        {err ? (
+          <Alert variant="destructive">
+            <AlertDescription>{err}</AlertDescription>
+          </Alert>
+        ) : null}
+      </CardContent>
+    </Card>
   );
 }

@@ -2,6 +2,7 @@ import { Router } from 'express';
 import { z } from 'zod';
 import { requireAuth, requireRole } from '../../auth/middleware.js';
 import { compileMongoFindDsl, DSLParseError } from '../../dsl/mini-find-lang.js';
+import { registerModule } from '../../plugins/module-registry.js';
 
 export const dslRouter = Router();
 
@@ -32,3 +33,9 @@ dslRouter.post(
     }
   },
 );
+
+registerModule({
+  id: 'dsl',
+  description: 'Langage de requête maison (lex/yacc) pour MongoDB.',
+  router: dslRouter,
+});

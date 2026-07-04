@@ -16,11 +16,15 @@ import type { StoredFile } from './types.js';
 export type StorageBackend = 'local' | 'minio';
 
 export function activeStorageBackend(): StorageBackend {
-  if (env.STORAGE_BACKEND) {
-    return env.STORAGE_BACKEND;
-  }
+  // En environnement de test, on force le stockage local : le SDK AWS/minio
+  // échoue sous Jest+ts-jest (import dynamique ESM impossible sans
+  // --experimental-vm-modules), donc NODE_ENV=test doit toujours l'emporter
+  // sur un STORAGE_BACKEND=minio hérité du .env partagé avec le mode dev.
   if (env.NODE_ENV === 'test') {
     return 'local';
+  }
+  if (env.STORAGE_BACKEND) {
+    return env.STORAGE_BACKEND;
   }
   return 'minio';
 }

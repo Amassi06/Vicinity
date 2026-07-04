@@ -5,6 +5,7 @@ import request from 'supertest';
 import { authenticator } from 'otplib';
 import { createApp } from '../src/http/app';
 import { prisma } from '../src/db/prisma';
+import { ensureTestNeighbourhood } from './helpers';
 
 const TIMEOUT_MS = 20_000;
 const EMAIL = `__test__mfa_${Date.now()}@example.com`;
@@ -28,7 +29,7 @@ describe('MFA TOTP + SSO', () => {
     await prisma.$connect();
     const signup = await request(app)
       .post('/auth/signup')
-      .send({ email: EMAIL, password: PASSWORD, displayName: 'MFA Test' });
+      .send({ email: EMAIL, password: PASSWORD, displayName: 'MFA Test', neighbourhoodId: await ensureTestNeighbourhood() });
     const body = signup.body as AuthBody;
     accessToken = body.accessToken;
     userId = body.user.id;
@@ -71,6 +72,33 @@ describe('MFA TOTP + SSO', () => {
       .send({ token: authenticator.generate(secret) });
     expect(verify.status).toBe(200);
     expect((verify.body as { valid: boolean }).valid).toBe(true);
+  });
+
+  it('login requires a valid MFA token once MFA is enabled', async () => {
+    const enroll = await request(app)
+      .post('/auth/mfa/enroll')
+      .set('Authorization', `Bearer ${accessToken}`);
+    const { secret } = enroll.body as EnrollBody;
+    await request(app)
+      .post('/auth/mfa/activate')
+      .set('Authorization', `Bearer ${accessToken}`)
+      .send({ token: authenticator.generate(secret) });
+
+    const noToken = await request(app).post('/auth/login').send({ email: EMAIL, password: PASSWORD });
+    expect(noToken.status).toBe(401);
+    expect((noToken.body as { error: string }).error).toBe('mfa_required');
+
+    const wrongToken = await request(app)
+      .post('/auth/login')
+      .send({ email: EMAIL, password: PASSWORD, mfaToken: '000000' });
+    expect(wrongToken.status).toBe(401);
+    expect((wrongToken.body as { error: string }).error).toBe('mfa_required');
+
+    const goodLogin = await request(app)
+      .post('/auth/login')
+      .send({ email: EMAIL, password: PASSWORD, mfaToken: authenticator.generate(secret) });
+    expect(goodLogin.status).toBe(200);
+    expect((goodLogin.body as AuthBody).user.id).toBe(userId);
   });
 
   it('activate fails with wrong token', async () => {

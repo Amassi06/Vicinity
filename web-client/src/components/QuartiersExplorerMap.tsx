@@ -37,7 +37,7 @@ export function QuartiersExplorerMap({ items }: { items: NeighbourhoodDto[] }): 
 
   return (
     <div>
-      <p className="map-hint">
+      <p className="mb-2.5 text-muted-foreground">
         Modélisation PostGIS : chaque contour est le polygone GeoJSON du quartier. Cliquez dans un
         périmètre pour un lookup <code>/neighbourhoods/lookup/point</code>.
       </p>
@@ -73,7 +73,7 @@ export function QuartiersExplorerMap({ items }: { items: NeighbourhoodDto[] }): 
         {boundaries.length > 0 ? <MapInspectClick onPick={inspectPoint} /> : null}
       </BoundedNeighbourhoodMap>
       {boundaries.length > 0 ? (
-        <div className="lookup-panel">
+        <div className="mt-3 rounded-lg border border-border bg-card px-3.5 py-2.5">
           {lookupBusy ? (
             <p style={{ margin: 0 }}>Calcul quartier…</p>
           ) : lookupMatches ? (

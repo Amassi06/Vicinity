@@ -58,7 +58,7 @@ export async function listPolls(neighbourhoodId: string) {
   return PollModel.find({ neighbourhoodId }).sort({ createdAt: -1 }).limit(50).exec();
 }
 
-export async function getPoll(pollId: string) {
+export async function getPoll(pollId: string, userId?: string) {
   const poll = await PollModel.findById(pollId).exec();
   if (!poll) return null;
 
@@ -83,15 +83,33 @@ export async function getPoll(pollId: string) {
       totalVotes,
     }) ?? {};
 
+  // Choix courant de l'utilisateur, pour la surbrillance côté UI.
+  let myChoice: number | null = null;
+  if (userId) {
+    const myVote = await VoteModel.findOne({ pollId, userId }).lean();
+    myChoice = myVote ? myVote.choiceIndex : null;
+  }
+
+  // Résultats en pourcentages, prêts pour les barres.
+  const percentages = poll.options.map((_, i) =>
+    totalVotes > 0 ? Math.round(((tallies[i] ?? 0) / totalVotes) * 100) : 0,
+  );
+
   return {
     poll,
     tallies,
     totalVotes,
+    percentages,
+    myChoice,
     plugin: { id: plugin.id, name: plugin.name },
     pluginResults,
   };
 }
 
+/**
+ * Enregistre ou met à jour le vote de l'utilisateur. Le changement de vote est
+ * autorisé tant que le sondage est ouvert (upsert sur (pollId, userId)).
+ */
 export async function castVote(userId: string, pollId: string, raw: unknown) {
   const poll = await PollModel.findById(pollId);
   if (!poll) return null;
@@ -104,16 +122,9 @@ export async function castVote(userId: string, pollId: string, raw: unknown) {
   const choiceIndex = parsed.data.choiceIndex;
   if (choiceIndex >= poll.options.length) throw new Error('invalid_choice');
 
-  try {
-    return await VoteModel.create({
-      pollId,
-      userId,
-      choiceIndex,
-    });
-  } catch (err) {
-    if (err instanceof Error && /E11000/.test(err.message)) {
-      throw new Error('already_voted');
-    }
-    throw err;
-  }
+  return VoteModel.findOneAndUpdate(
+    { pollId, userId },
+    { $set: { choiceIndex } },
+    { upsert: true, new: true },
+  );
 }

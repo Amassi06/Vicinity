@@ -7,6 +7,7 @@ export type NeighbourhoodMapView = {
   maxBounds: L.LatLngBounds;
 };
 
+/** Vue carte limitée aux périmètres modélisés (pas de carte du monde). */
 export function neighbourhoodMapView(boundaries: PolygonGeoJson[]): NeighbourhoodMapView | null {
   if (boundaries.length === 0) return null;
 

@@ -12,11 +12,13 @@ const SignupSchema = z.object({
   email: z.string().email(),
   password: z.string().min(8).max(128),
   displayName: z.string().min(1).max(120),
+  neighbourhoodId: z.string().uuid(),
 });
 
 const LoginSchema = z.object({
   email: z.string().email(),
   password: z.string().min(1).max(128),
+  mfaToken: z.string().regex(/^\d{6}$/).optional(),
 });
 
 const RefreshSchema = z.object({
@@ -43,6 +45,10 @@ router.post('/auth/signup', async (req: Request, res: Response) => {
       res.status(409).json({ error: 'email_already_registered' });
       return;
     }
+    if (err instanceof Error && err.message === 'invalid_neighbourhood') {
+      res.status(400).json({ error: 'invalid_neighbourhood' });
+      return;
+    }
     logger.error({ err }, 'signup failed');
     res.status(500).json({ error: 'internal_error' });
   }
@@ -55,15 +61,16 @@ router.post('/auth/login', async (req: Request, res: Response) => {
     return;
   }
   try {
-    const result = await authService.login(parsed.data.email, parsed.data.password);
+    const result = await authService.login(parsed.data.email, parsed.data.password, parsed.data.mfaToken);
     await writeAuditLog({
       userId: result.user.id,
       action: 'LOGIN',
       ipAddress: clientIp(req) ?? null,
     });
     res.status(200).json(result);
-  } catch {
-    res.status(401).json({ error: 'invalid_credentials' });
+  } catch (err) {
+    const error = err instanceof Error && err.message === 'mfa_required' ? 'mfa_required' : 'invalid_credentials';
+    res.status(401).json({ error });
   }
 });
 
@@ -97,7 +104,14 @@ router.post('/auth/logout', async (req: Request, res: Response) => {
 router.get('/auth/me', requireAuth, async (req: Request, res: Response) => {
   const user = await prisma.user.findUnique({
     where: { id: req.auth!.sub },
-    select: { email: true, role: true, mfaEnabled: true },
+    select: {
+      email: true,
+      displayName: true,
+      role: true,
+      mfaEnabled: true,
+      neighbourhoodId: true,
+      neighbourhood: { select: { name: true } },
+    },
   });
   if (!user) {
     res.status(404).json({ error: 'user_not_found' });
@@ -106,8 +120,11 @@ router.get('/auth/me', requireAuth, async (req: Request, res: Response) => {
   res.status(200).json({
     sub: req.auth!.sub,
     email: user.email,
+    displayName: user.displayName,
     role: user.role,
     mfa: user.mfaEnabled,
+    neighbourhoodId: user.neighbourhoodId,
+    neighbourhoodName: user.neighbourhood?.name ?? null,
   });
 });
 

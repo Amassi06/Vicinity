@@ -54,6 +54,9 @@ public final class LoginView extends VBox {
         final PasswordField password = new PasswordField();
         password.setPromptText("Mot de passe");
 
+        final TextField mfaCode = new TextField();
+        mfaCode.setPromptText("Code MFA (si activé)");
+
         final TextField ssoToken = new TextField();
         ssoToken.setPromptText("Jeton SSO (optionnel, depuis le web admin)");
 
@@ -75,8 +78,10 @@ public final class LoginView extends VBox {
         grid.add(email, 1, 0);
         grid.add(new Label("Mot de passe"), 0, 1);
         grid.add(password, 1, 1);
-        grid.add(new Label("SSO"), 0, 2);
-        grid.add(ssoToken, 1, 2);
+        grid.add(new Label("Code MFA"), 0, 2);
+        grid.add(mfaCode, 1, 2);
+        grid.add(new Label("SSO"), 0, 3);
+        grid.add(ssoToken, 1, 3);
 
         loginBtn.setOnAction(
                 e ->
@@ -85,7 +90,10 @@ public final class LoginView extends VBox {
                                 loginBtn,
                                 () -> {
                                     final AuthResult result =
-                                            api.login(email.getText().trim(), password.getText());
+                                            api.login(
+                                                    email.getText().trim(),
+                                                    password.getText(),
+                                                    mfaCode.getText().trim());
                                     AppSession.applyLogin(
                                             result.user(),
                                             result.accessToken(),
@@ -163,7 +171,10 @@ public final class LoginView extends VBox {
                     AppSession.clear();
                     final Throwable err = task.getException();
                     if (err instanceof ApiException apiErr) {
-                        feedback.setText(apiErr.getMessage());
+                        feedback.setText(
+                                "mfa_required".equals(apiErr.getMessage())
+                                        ? "Code MFA requis — saisissez-le puis réessayez."
+                                        : apiErr.getMessage());
                     } else {
                         feedback.setText(
                                 err == null

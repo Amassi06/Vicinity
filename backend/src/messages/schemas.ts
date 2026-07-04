@@ -1,10 +1,12 @@
 import { z } from 'zod';
 
+export const AttachmentKindSchema = z.enum(['image', 'audio', 'video', 'file']);
+
 const AttachmentSchema = z.object({
   storageKey: z.string().min(1),
   contentType: z.string().min(1),
   size: z.number().int().nonnegative(),
-  kind: z.enum(['image', 'audio', 'video', 'file']),
+  kind: AttachmentKindSchema,
 });
 
 export const MessageCreateSchema = z.object({

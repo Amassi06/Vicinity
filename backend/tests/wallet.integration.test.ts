@@ -6,6 +6,7 @@ import request from 'supertest';
 import { createApp } from '../src/http/app';
 import { prisma } from '../src/db/prisma';
 import { creditPoints, transferPoints, getWallet } from '../src/wallet/service';
+import { ensureTestNeighbourhood } from './helpers';
 
 const TIMEOUT_MS = 20_000;
 const STAMP = Date.now();
@@ -22,7 +23,7 @@ interface AuthBody {
 async function signup(app: ReturnType<typeof createApp>, email: string) {
   const res = await request(app)
     .post('/auth/signup')
-    .send({ email, password: PASSWORD, displayName: email });
+    .send({ email, password: PASSWORD, displayName: email, neighbourhoodId: await ensureTestNeighbourhood() });
   return res.body as AuthBody;
 }
 
@@ -67,7 +68,7 @@ describe('Wallet — points & transactions', () => {
       reason: 'WELCOME_BONUS',
     });
     const w = await getWallet(aliceId);
-    expect(w.balance).toBe(100);
+    expect(w.balance).toBe(200);
     expect(w.recent[0]).toMatchObject({ direction: 'CREDIT', amount: 100 });
   });
 
@@ -79,8 +80,8 @@ describe('Wallet — points & transactions', () => {
       reason: 'SERVICE_PAYMENT',
     });
     const [alice, bob] = await Promise.all([getWallet(aliceId), getWallet(bobId)]);
-    expect(alice.balance).toBe(70);
-    expect(bob.balance).toBe(30);
+    expect(alice.balance).toBe(170);
+    expect(bob.balance).toBe(130);
   });
 
   it('rejects transfer when funds are insufficient (no partial state)', async () => {
@@ -93,8 +94,8 @@ describe('Wallet — points & transactions', () => {
       }),
     ).rejects.toThrow('insufficient_funds');
     const [alice, bob] = await Promise.all([getWallet(aliceId), getWallet(bobId)]);
-    expect(alice.balance).toBe(70);
-    expect(bob.balance).toBe(30);
+    expect(alice.balance).toBe(170);
+    expect(bob.balance).toBe(130);
   });
 
   it('GET /me/wallet returns balance + recent transactions', async () => {
@@ -105,7 +106,7 @@ describe('Wallet — points & transactions', () => {
     const res = await request(app).get('/me/wallet').set('Authorization', `Bearer ${token}`);
     expect(res.status).toBe(200);
     const body = res.body as { balance: number; recent: unknown[] };
-    expect(body.balance).toBe(70);
+    expect(body.balance).toBe(170);
     expect(Array.isArray(body.recent)).toBe(true);
     expect(body.recent.length).toBeGreaterThanOrEqual(2);
   });
@@ -127,6 +128,6 @@ describe('Wallet — points & transactions', () => {
       .send({ toUserId: bobId, amount: 10, reason: 'ADMIN_ADJUSTMENT' });
     expect(ok.status).toBe(204);
     const bob = await getWallet(bobId);
-    expect(bob.balance).toBe(40);
+    expect(bob.balance).toBe(140);
   });
 });

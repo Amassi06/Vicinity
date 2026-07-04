@@ -16,7 +16,8 @@ export interface EventEntity extends MongoDocument {
   attendees: string[];
   interested: string[];
   declined: string[];
-  status: 'draft' | 'published' | 'cancelled';
+  status: 'draft' | 'published' | 'cancelled' | 'archived';
+  archivedAt?: Date | null;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -40,10 +41,11 @@ const EventSchema = new Schema<EventEntity>(
     declined: { type: [String], default: [] },
     status: {
       type: String,
-      enum: ['draft', 'published', 'cancelled'],
+      enum: ['draft', 'published', 'cancelled', 'archived'],
       default: 'draft',
       index: true,
     },
+    archivedAt: { type: Date, default: null },
   },
   { timestamps: true, collection: 'events' },
 );

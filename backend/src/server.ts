@@ -8,7 +8,9 @@ import { getNeo4jDriver, closeNeo4j } from './db/neo4j/driver.js';
 import { applyNeo4jConstraints } from './db/neo4j/constraints.js';
 import { attachSocketHttp, shutdownSockets } from './realtime/socket-server.js';
 import { bootstrapPlugins } from './plugins/bootstrap.js';
+import { listModules } from './plugins/module-registry.js';
 import { initStorage } from './storage/index.js';
+import { startEventArchiver, stopEventArchiver } from './events/scheduler.js';
 
 async function bootstrap(): Promise<void> {
   await prisma.$connect();
@@ -17,10 +19,14 @@ async function bootstrap(): Promise<void> {
   await applyNeo4jConstraints();
   await initStorage();
   bootstrapPlugins();
+  for (const mod of listModules()) {
+    mod.bootstrap?.();
+  }
 
   const app = createApp();
   const server = createHttpServer(app);
   attachSocketHttp(server);
+  startEventArchiver();
 
   server.listen(env.PORT, () => {
     logger.info({ port: env.PORT, env: env.NODE_ENV }, 'vicinity backend listening');
@@ -28,6 +34,7 @@ async function bootstrap(): Promise<void> {
 
   const shutdown = (signal: NodeJS.Signals): void => {
     logger.info({ signal }, 'shutting down');
+    stopEventArchiver();
     server.close(() => {
       void (async () => {
         await shutdownSockets();

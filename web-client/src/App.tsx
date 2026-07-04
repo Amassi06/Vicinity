@@ -1,7 +1,11 @@
 import { BrowserRouter, Route, Routes } from 'react-router-dom';
 import type { ReactElement } from 'react';
 import { AuthProvider } from './context/AuthContext.js';
+import { RealtimeProvider } from './context/RealtimeContext.js';
+import { NotificationsProvider } from './context/NotificationsContext.js';
+import { I18nProvider } from './i18n/I18nContext.js';
 import { AppShell, RequireAuthGate } from './layout/AppShell.js';
+import { AuthLayout } from './layout/AuthLayout.js';
 import { NeighbourhoodOutlet } from './layout/NeighbourhoodOutlet.js';
 import { LoginPage } from './pages/LoginPage.js';
 import { RegisterPage } from './pages/RegisterPage.js';
@@ -15,32 +19,44 @@ import { WalletPage } from './pages/WalletPage.js';
 import { MfaPage } from './pages/MfaPage.js';
 import { DocumentsPage } from './pages/DocumentsPage.js';
 import { PrivacyPage } from './pages/PrivacyPage.js';
+import { AccountPage } from './pages/AccountPage.js';
+import { IncidentsPage } from './pages/IncidentsPage.js';
 
 export function App(): ReactElement {
   return (
     <BrowserRouter>
-      <AuthProvider>
-        <Routes>
-          <Route element={<AppShell />}>
-            <Route path="/login" element={<LoginPage />} />
-            <Route path="/register" element={<RegisterPage />} />
-            <Route element={<RequireAuthGate />}>
-              <Route element={<NeighbourhoodOutlet />}>
-                <Route path="/" element={<HomePage />} />
-                <Route path="/quartiers" element={<QuartiersPage />} />
-                <Route path="/evenements" element={<EventsPage />} />
-                <Route path="/annonces" element={<ListingsPage />} />
-                <Route path="/sondages" element={<PollsPage />} />
-                <Route path="/messages" element={<MessagesPage />} />
-                <Route path="/portefeuille" element={<WalletPage />} />
-                <Route path="/documents" element={<DocumentsPage />} />
-                <Route path="/mfa" element={<MfaPage />} />
-                <Route path="/confidentialite" element={<PrivacyPage />} />
+      <I18nProvider>
+        <AuthProvider>
+          <RealtimeProvider>
+            <NotificationsProvider>
+          <Routes>
+            <Route element={<AuthLayout />}>
+              <Route path="/login" element={<LoginPage />} />
+              <Route path="/register" element={<RegisterPage />} />
+            </Route>
+            <Route element={<AppShell />}>
+              <Route element={<RequireAuthGate />}>
+                <Route element={<NeighbourhoodOutlet />}>
+                  <Route path="/" element={<HomePage />} />
+                  <Route path="/quartiers" element={<QuartiersPage />} />
+                  <Route path="/evenements" element={<EventsPage />} />
+                  <Route path="/annonces" element={<ListingsPage />} />
+                  <Route path="/sondages" element={<PollsPage />} />
+                  <Route path="/messages" element={<MessagesPage />} />
+                  <Route path="/portefeuille" element={<WalletPage />} />
+                  <Route path="/documents" element={<DocumentsPage />} />
+                  <Route path="/incidents" element={<IncidentsPage />} />
+                  <Route path="/mfa" element={<MfaPage />} />
+                  <Route path="/compte" element={<AccountPage />} />
+                  <Route path="/confidentialite" element={<PrivacyPage />} />
+                </Route>
               </Route>
             </Route>
-          </Route>
-        </Routes>
-      </AuthProvider>
+          </Routes>
+            </NotificationsProvider>
+          </RealtimeProvider>
+        </AuthProvider>
+      </I18nProvider>
     </BrowserRouter>
   );
 }

@@ -15,6 +15,7 @@ import {
   uploadDocument,
 } from '../../documents/service.js';
 import { readStoredFile } from '../../storage/index.js';
+import { registerModule } from '../../plugins/module-registry.js';
 
 export const documentsRouter: Router = Router();
 
@@ -39,7 +40,7 @@ function parseId(req: Request): string | null {
 }
 
 const UploadBodySchema = z.object({
-  title: z.string().min(1).max(160),
+  title: z.string().trim().min(1).max(160),
 });
 
 documentsRouter.get('/documents', requireAuth, async (req, res) => {
@@ -61,13 +62,18 @@ documentsRouter.post(
       res.status(400).json({ error: 'invalid_input', issues: meta.error.issues });
       return;
     }
-    const doc = await uploadDocument({
-      ownerId: req.auth!.sub,
-      title: meta.data.title,
-      buffer: req.file.buffer,
-      contentType: req.file.mimetype,
-    });
-    res.status(201).json(doc);
+    try {
+      const doc = await uploadDocument({
+        ownerId: req.auth!.sub,
+        title: meta.data.title,
+        buffer: req.file.buffer,
+        contentType: req.file.mimetype,
+      });
+      res.status(201).json(doc);
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'unknown_error';
+      res.status(400).json({ error: message });
+    }
   },
 );
 
@@ -168,8 +174,15 @@ documentsRouter.post(
         invalid_zone: 404,
         already_signed: 409,
         mfa_required: 401,
+        rate_limited: 429,
       };
       res.status(statusByCode[message] ?? 400).json({ error: message });
     }
   },
 );
+
+registerModule({
+  id: 'documents',
+  description: 'Documents PDF, zones de signature et signatures numériques.',
+  router: documentsRouter,
+});

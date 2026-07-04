@@ -5,8 +5,12 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
 import com.vicinity.desktop.api.dto.AuthResult;
+import com.vicinity.desktop.api.dto.EventItem;
+import com.vicinity.desktop.api.dto.Incident;
 import com.vicinity.desktop.api.dto.MeResponse;
 import com.vicinity.desktop.api.dto.Neighbourhood;
+import com.vicinity.desktop.api.dto.Stats;
+import com.vicinity.desktop.api.dto.VersionInfo;
 import com.vicinity.desktop.config.DesktopConfig;
 import com.vicinity.desktop.session.AppSession;
 import java.io.IOException;
@@ -16,6 +20,8 @@ import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 import java.time.Duration;
+import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -44,12 +50,18 @@ public final class VicinityApiClient {
     }
 
     public AuthResult login(final String email, final String password) throws Exception {
-        return exchange(
-                "POST",
-                "/auth/login",
-                Optional.of(Map.of("email", email, "password", password)),
-                false,
-                AuthResult.class);
+        return login(email, password, null);
+    }
+
+    public AuthResult login(final String email, final String password, final String mfaToken)
+            throws Exception {
+        final Map<String, Object> body = new HashMap<>();
+        body.put("email", email);
+        body.put("password", password);
+        if (mfaToken != null && !mfaToken.isBlank()) {
+            body.put("mfaToken", mfaToken);
+        }
+        return exchange("POST", "/auth/login", Optional.of(body), false, AuthResult.class);
     }
 
     public MeResponse me() throws Exception {
@@ -96,6 +108,76 @@ public final class VicinityApiClient {
 
     public JsonNode getPluginsCatalog() throws Exception {
         return exchange("GET", "/plugins", Optional.empty(), true, JsonNode.class);
+    }
+
+    public List<Incident> listIncidents(final String neighbourhoodId) throws Exception {
+        final JsonNode root =
+                exchange(
+                        "GET",
+                        "/incidents?neighbourhoodId=" + neighbourhoodId,
+                        Optional.empty(),
+                        true,
+                        JsonNode.class);
+        return itemsToList(root, Incident.class);
+    }
+
+    /**
+     * Change le statut d'un incident. En cas de conflit (l'incident a été modifié
+     * entre-temps par quelqu'un d'autre), lève une ApiException(409, "conflict").
+     */
+    public Incident updateIncidentStatus(
+            final String incidentId, final String status, final String expectedUpdatedAt)
+            throws Exception {
+        final Map<String, Object> body = new HashMap<>();
+        body.put("status", status);
+        if (expectedUpdatedAt != null) {
+            body.put("expectedUpdatedAt", expectedUpdatedAt);
+        }
+        return exchange(
+                "PATCH", "/incidents/" + incidentId, Optional.of(body), true, Incident.class);
+    }
+
+    public Stats getStats(final String neighbourhoodId) throws Exception {
+        return exchange(
+                "GET", "/admin/stats?neighbourhoodId=" + neighbourhoodId, Optional.empty(), true, Stats.class);
+    }
+
+    public List<EventItem> listEvents(final String neighbourhoodId) throws Exception {
+        final JsonNode root =
+                exchange(
+                        "GET",
+                        "/events?neighbourhoodId=" + neighbourhoodId,
+                        Optional.empty(),
+                        true,
+                        JsonNode.class);
+        return itemsToList(root, EventItem.class);
+    }
+
+    public List<EventItem> getRecommendations(final String neighbourhoodId) throws Exception {
+        final JsonNode root =
+                exchange(
+                        "GET",
+                        "/events/recommendations?neighbourhoodId=" + neighbourhoodId,
+                        Optional.empty(),
+                        true,
+                        JsonNode.class);
+        return itemsToList(root, EventItem.class);
+    }
+
+    public VersionInfo getLatestVersion() throws Exception {
+        return exchange(
+                "GET", "/desktop/latest-version", Optional.empty(), false, VersionInfo.class);
+    }
+
+    private <T> List<T> itemsToList(final JsonNode root, final Class<T> type) throws Exception {
+        final List<T> out = new ArrayList<>();
+        if (root == null || !root.has("items")) {
+            return out;
+        }
+        for (final JsonNode node : root.get("items")) {
+            out.add(mapper.treeToValue(node, type));
+        }
+        return out;
     }
 
     public void logoutRemote() {

@@ -10,6 +10,7 @@ public final class AppSession {
     private static String refreshToken;
     private static MeResponse currentUser;
     private static boolean offlineMode;
+    private static String selectedNeighbourhoodId;
 
     private AppSession() {}
 
@@ -92,6 +93,14 @@ public final class AppSession {
 
     public static boolean isAdmin() {
         return currentUser != null && "ADMIN".equals(currentUser.role());
+    }
+
+    public static String selectedNeighbourhoodId() {
+        return selectedNeighbourhoodId;
+    }
+
+    public static void setSelectedNeighbourhoodId(final String id) {
+        selectedNeighbourhoodId = id;
     }
 
     public static boolean canUseDsl() {

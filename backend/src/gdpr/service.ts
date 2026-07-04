@@ -1,5 +1,6 @@
 import { prisma } from '../db/prisma.js';
 import { writeAuditLog } from '../audit/service.js';
+import { verifyMfaForUser } from '../auth/service.js';
 import { DocumentModel } from '../db/mongo/models/document.model.js';
 import { MessageModel } from '../db/mongo/models/message.model.js';
 import { PollModel } from '../db/mongo/models/poll.model.js';
@@ -105,6 +106,62 @@ export async function exportUserData(userId: string, ipAddress?: string | null |
     votes,
     messages,
   };
+}
+
+export interface ProfilePatch {
+  displayName?: string;
+  email?: string;
+  neighbourhoodId?: string;
+}
+
+/**
+ * Droit de rectification RGPD : le nom se modifie librement, l'e-mail
+ * nécessite une vérification MFA (au même titre que la signature de document)
+ * — mais uniquement pour les utilisateurs qui ont activé le MFA. Un compte
+ * sans MFA n'a pas de second facteur à vérifier : `verifyMfaForUser` renvoie
+ * toujours `false` pour lui, ce qui bloquerait à vie tout changement d'e-mail
+ * si on l'exigeait quand même.
+ */
+export async function updateProfile(
+  userId: string,
+  patch: ProfilePatch,
+  mfaToken: string | undefined,
+  ipAddress?: string | null | undefined,
+): Promise<{ id: string; email: string; displayName: string }> {
+  const user = await prisma.user.findUnique({ where: { id: userId } });
+  if (!user) throw new Error('user_not_found');
+
+  if (patch.email && patch.email !== user.email && user.mfaEnabled) {
+    if (!mfaToken || !(await verifyMfaForUser(userId, mfaToken))) {
+      throw new Error('mfa_required');
+    }
+  }
+
+  if (patch.neighbourhoodId) {
+    const neighbourhood = await prisma.neighbourhood.findUnique({
+      where: { id: patch.neighbourhoodId },
+      select: { id: true },
+    });
+    if (!neighbourhood) throw new Error('invalid_neighbourhood');
+  }
+
+  const updated = await prisma.user.update({
+    where: { id: userId },
+    data: {
+      ...(patch.displayName ? { displayName: patch.displayName } : {}),
+      ...(patch.email ? { email: patch.email } : {}),
+      ...(patch.neighbourhoodId ? { neighbourhoodId: patch.neighbourhoodId } : {}),
+    },
+  });
+
+  await writeAuditLog({
+    userId,
+    action: 'UPDATE_PROFILE',
+    metadata: { fields: Object.keys(patch) },
+    ipAddress,
+  });
+
+  return { id: updated.id, email: updated.email, displayName: updated.displayName };
 }
 
 export async function deleteUserAccount(

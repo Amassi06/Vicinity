@@ -1,17 +1,39 @@
 # grammar/
 
-Fichiers **lex/yacc de référence** décrivant le sous-langage FIND vers Mongo.
+Langage de requête maison **FIND -> filtre Mongo** :
 
-La chaîne officielle compilée durant les revues utilise le compilateur TypeScript
-`backend/src/dsl/mini-find-lang.ts` (pas besoin de C pour `npm test`).
+```
+FIND <collection> WHERE <champ> EQ <valeur> [LIMIT <n>]
+```
 
-Pour régénérer du C hors CI :
+## Chemin principal : jison (lex/yacc en JS)
+
+`mongo-dsl.jison` est la grammaire officielle, écrite au format jison (le port
+JS standard de flex+bison, mêmes concepts : section lexicale `%lex ... /lex`
+puis règles de grammaire `%%`). Elle est compilée en un vrai parser LALR via :
 
 ```bash
-cd grammar
+cd backend
+npm run dsl:build
+# génère backend/src/dsl/generated/mongo-dsl.parser.js (committé)
+```
+
+`backend/src/dsl/mini-find-lang.ts` délègue directement à ce parser généré ;
+c'est lui qui est exécuté en test/prod (`compileMongoFindDsl()`).
+
+## Grammaire de référence flex/bison (documentation)
+
+`mongo-dsl.l.example` et `mongo-dsl.y` documentent la même grammaire dans sa
+forme C flex/bison originale (tokens FIND/WHERE/EQ/LIMIT/IDENT/STRING/NUMBER).
+Ils ne sont pas utilisés au runtime — les garder sert de référence/preuve que
+la grammaire jison est équivalente à une vraie grammaire lex/yacc. Pour les
+régénérer en C (hors CI) :
+
+```bash
 flex mongo-dsl.l
 bison -d mongo-dsl.y   # mongo-dsl.tab.h + mongo-dsl.tab.c
 ```
 
-Puis assembler un shim C minimal contenant une fonction `ffi` si tu dois lier depuis Node —
-hors périmètre du squelette Vicinity livré ici.
+Lier ce C dans Node nécessiterait une FFI — hors périmètre du projet, jison
+étant l'équivalent JS-natif à faible risque qui satisfait l'exigence "langage
+d'interrogation maison via lex/yacc" sans dépendance native.

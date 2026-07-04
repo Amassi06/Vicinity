@@ -1,9 +1,50 @@
 import crypto from 'node:crypto';
 import { prisma } from '../db/prisma.js';
-import { DocumentModel, type DocumentEntity } from '../db/mongo/models/index.js';
+import { DocumentModel, type DocumentEntity, type SignatureZone } from '../db/mongo/models/index.js';
 import { verifyMfaForUser } from '../auth/service.js';
 import { saveBuffer } from '../storage/index.js';
 import type { SetZonesInput, SignatureZoneInput } from './schemas.js';
+
+const MAX_FAILED_MFA_ATTEMPTS = 5;
+const MFA_LOCKOUT_WINDOW_MS = 5 * 60 * 1000;
+
+interface FailedAttemptWindow {
+  count: number;
+  windowStart: number;
+}
+
+const failedMfaAttempts = new Map<string, FailedAttemptWindow>();
+
+function assertMfaNotRateLimited(userId: string): void {
+  const entry = failedMfaAttempts.get(userId);
+  if (!entry) return;
+  if (Date.now() - entry.windowStart > MFA_LOCKOUT_WINDOW_MS) {
+    failedMfaAttempts.delete(userId);
+    return;
+  }
+  if (entry.count >= MAX_FAILED_MFA_ATTEMPTS) throw new Error('rate_limited');
+}
+
+function registerFailedMfaAttempt(userId: string): void {
+  const now = Date.now();
+  const entry = failedMfaAttempts.get(userId);
+  if (!entry || now - entry.windowStart > MFA_LOCKOUT_WINDOW_MS) {
+    failedMfaAttempts.set(userId, { count: 1, windowStart: now });
+    return;
+  }
+  entry.count += 1;
+}
+
+function clearFailedMfaAttempts(userId: string): void {
+  failedMfaAttempts.delete(userId);
+}
+
+export function computeStatusAfterSigning(
+  zones: Array<Pick<SignatureZone, 'required' | 'signedBy'>>,
+): 'signed' | 'pending_signatures' {
+  const allRequiredSigned = zones.filter((z) => z.required).every((z) => Boolean(z.signedBy));
+  return allRequiredSigned ? 'signed' : 'pending_signatures';
+}
 
 export interface UploadInput {
   ownerId: string;
@@ -53,12 +94,11 @@ export async function setZones(
   ownerId: string,
   input: SetZonesInput,
 ): Promise<DocumentEntity> {
-  const doc = await DocumentModel.findById(id);
-  if (!doc) throw new Error('not_found');
-  if (doc.ownerId !== ownerId) throw new Error('forbidden');
-  if (doc.status !== 'draft') throw new Error('invalid_state');
+  const existing = await DocumentModel.findById(id);
+  if (!existing) throw new Error('not_found');
+  if (existing.ownerId !== ownerId) throw new Error('forbidden');
 
-  doc.zones = input.zones.map((z: SignatureZoneInput) => ({
+  const zones = input.zones.map((z: SignatureZoneInput) => ({
     page: z.page,
     x: z.x,
     y: z.y,
@@ -69,13 +109,17 @@ export async function setZones(
     signedAt: null,
     signatureHash: null,
   }));
-  if (input.participants?.length) {
-    const merged = new Set([ownerId, ...input.participants]);
-    doc.participants = Array.from(merged);
-  }
-  doc.status = 'pending_signatures';
-  await doc.save();
-  return doc;
+  const participants = input.participants?.length
+    ? Array.from(new Set([ownerId, ...input.participants]))
+    : existing.participants;
+
+  const updated = await DocumentModel.findOneAndUpdate(
+    { _id: id, ownerId, status: 'draft' },
+    { $set: { zones, participants, status: 'pending_signatures' } },
+    { new: true },
+  );
+  if (!updated) throw new Error('invalid_state');
+  return updated;
 }
 
 /**
@@ -101,8 +145,13 @@ export async function signZone(
   if (!zone) throw new Error('invalid_zone');
   if (zone.signedBy) throw new Error('already_signed');
 
+  assertMfaNotRateLimited(userId);
   const mfaOk = await verifyMfaForUser(userId, token);
-  if (!mfaOk) throw new Error('mfa_required');
+  if (!mfaOk) {
+    registerFailedMfaAttempt(userId);
+    throw new Error('mfa_required');
+  }
+  clearFailedMfaAttempts(userId);
 
   const signedAt = new Date();
   const signatureHash = crypto
@@ -110,18 +159,43 @@ export async function signZone(
     .update(`${doc.sha256}|${userId}|${zoneIndex}|${signedAt.toISOString()}`)
     .digest('hex');
 
-  zone.signedBy = userId;
-  zone.signedAt = signedAt;
-  zone.signatureHash = signatureHash;
-  doc.markModified('zones');
+  const updated = await DocumentModel.findOneAndUpdate(
+    {
+      _id: id,
+      status: 'pending_signatures',
+      $expr: { $eq: [{ $arrayElemAt: ['$zones.signedBy', zoneIndex] }, null] },
+    },
+    [
+      {
+        $set: {
+          zones: {
+            $concatArrays: [
+              { $slice: ['$zones', zoneIndex] },
+              [
+                {
+                  $mergeObjects: [
+                    { $arrayElemAt: ['$zones', zoneIndex] },
+                    { signedBy: userId, signedAt, signatureHash },
+                  ],
+                },
+              ],
+              { $slice: ['$zones', zoneIndex + 1, { $size: '$zones' }] },
+            ],
+          },
+        },
+      },
+    ],
+    { new: true },
+  );
+  if (!updated) throw new Error('already_signed');
 
-  const allRequiredSigned = doc.zones
-    .filter((z) => z.required)
-    .every((z) => Boolean(z.signedBy));
-  if (allRequiredSigned) {
-    doc.status = 'signed';
+  if (computeStatusAfterSigning(updated.zones) === 'signed') {
+    await DocumentModel.updateOne(
+      { _id: id, status: 'pending_signatures' },
+      { $set: { status: 'signed' } },
+    );
+    updated.status = 'signed';
   }
-  await doc.save();
 
   await prisma.auditLog.create({
     data: {
@@ -135,5 +209,5 @@ export async function signZone(
     },
   });
 
-  return doc;
+  return updated;
 }

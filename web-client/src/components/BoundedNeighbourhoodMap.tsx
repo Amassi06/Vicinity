@@ -10,30 +10,24 @@ type Props = {
   children?: ReactNode;
 };
 
-/** Carte OSM cantonnée aux périmètres — sans vue « monde ». */
+/** Carte OSM cantonnée aux périmètres — vue par défaut Paris Centre. */
 export function BoundedNeighbourhoodMap({ boundaries, className, children }: Props): ReactElement {
   const view = useMemo(() => neighbourhoodMapView(boundaries), [boundaries]);
 
-  if (!view) {
-    return (
-      <div className={className ?? 'map-empty'}>
-        <p>Aucun périmètre de quartier modélisé.</p>
-        <p className="map-empty-hint">
-          Un administrateur doit tracer des polygones dans le back-office Vicinity Admin.
-        </p>
-      </div>
-    );
-  }
-
-  const mapKey = boundaries.map((b) => JSON.stringify(b.coordinates[0]?.[0])).join('|');
+  const mapKey =
+    boundaries.length > 0
+      ? boundaries.map((b) => JSON.stringify(b.coordinates[0]?.[0])).join('|')
+      : 'paris-centre';
 
   return (
-    <div className={className ?? 'map-wrap'}>
+    <div
+      className={className ?? 'h-[min(72vh,640px)] min-h-96 overflow-hidden rounded-lg border border-border'}
+    >
       <MapContainer
         key={mapKey}
         center={view.center}
         zoom={view.zoom}
-        minZoom={12}
+        minZoom={11}
         maxZoom={18}
         maxBounds={view.maxBounds}
         maxBoundsViscosity={1}

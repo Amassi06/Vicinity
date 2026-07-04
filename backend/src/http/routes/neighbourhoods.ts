@@ -7,6 +7,7 @@ import {
 } from '../../neighbourhood/schemas.js';
 import * as repo from '../../neighbourhood/repository.js';
 import { logger } from '../../logger/index.js';
+import { registerModule } from '../../plugins/module-registry.js';
 
 const router = Router();
 
@@ -15,6 +16,14 @@ const UuidParam = z.object({ id: z.string().uuid() });
 router.get('/neighbourhoods', requireAuth, async (_req: Request, res: Response) => {
   const all = await repo.listNeighbourhoods();
   res.status(200).json(all);
+});
+
+// Liste minimale (id + nom) sans authentification : consommée par le
+// formulaire d'inscription, où l'utilisateur n'a pas encore de compte.
+// Déclarée avant `/:id` pour que "public" ne soit pas capturé comme un id.
+router.get('/neighbourhoods/public', async (_req: Request, res: Response) => {
+  const all = await repo.listNeighbourhoods();
+  res.status(200).json(all.map(({ id, name }) => ({ id, name })));
 });
 
 router.get('/neighbourhoods/:id', requireAuth, async (req: Request, res: Response) => {
@@ -129,3 +138,9 @@ router.get(
 );
 
 export const neighbourhoodRouter = router;
+
+registerModule({
+  id: 'neighbourhoods',
+  description: 'Modélisation géographique des quartiers (PostGIS).',
+  router,
+});

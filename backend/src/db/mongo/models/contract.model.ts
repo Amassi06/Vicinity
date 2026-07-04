@@ -7,8 +7,11 @@ export interface ContractEntity extends MongoDocument {
   payerId: string;
   payeeId: string;
   pricePoints: number;
-  status: 'pending' | 'completed' | 'cancelled';
+  status: 'pending_signatures' | 'escrowed' | 'completed' | 'cancelled';
   pointTxId?: string | null;
+  payerSignedAt?: Date | null;
+  payeeSignedAt?: Date | null;
+  escrowedAt?: Date | null;
   acceptedAt: Date;
   completedAt?: Date | null;
   cancelledAt?: Date | null;
@@ -26,11 +29,14 @@ const ContractSchema = new Schema<ContractEntity>(
     pricePoints: { type: Number, required: true, min: 0 },
     status: {
       type: String,
-      enum: ['pending', 'completed', 'cancelled'],
-      default: 'pending',
+      enum: ['pending_signatures', 'escrowed', 'completed', 'cancelled'],
+      default: 'pending_signatures',
       index: true,
     },
     pointTxId: { type: String, default: null },
+    payerSignedAt: { type: Date, default: null },
+    payeeSignedAt: { type: Date, default: null },
+    escrowedAt: { type: Date, default: null },
     acceptedAt: { type: Date, default: () => new Date() },
     completedAt: { type: Date, default: null },
     cancelledAt: { type: Date, default: null },

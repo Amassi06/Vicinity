@@ -30,9 +30,14 @@ export function BoundedNeighbourhoodMap({
 
   if (!view) {
     return (
-      <div className={className ?? 'map-empty'}>
+      <div
+        className={
+          className ??
+          'flex min-h-72 flex-col items-center justify-center rounded-lg border border-dashed border-input bg-card p-8 text-center'
+        }
+      >
         <p>Aucun quartier sur la carte.</p>
-        <p className="map-empty-hint">
+        <p className="max-w-md text-muted-foreground">
           Cliquez « Nouveau tracé » : la carte se centre sur votre position (ou autorisez la
           géolocalisation) pour dessiner le premier périmètre.
         </p>
@@ -43,7 +48,7 @@ export function BoundedNeighbourhoodMap({
   const mapKey = `${boundaries.length}:${view.center.join(',')}`;
 
   return (
-    <div className={className ?? 'map-wrap'}>
+    <div className={className ?? 'h-[min(72vh,640px)] min-h-96 overflow-hidden rounded-lg border border-border'}>
       <MapContainer
         key={mapKey}
         center={view.center}

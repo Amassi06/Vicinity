@@ -5,6 +5,7 @@
 import request from 'supertest';
 import { createApp } from '../src/http/app';
 import { prisma } from '../src/db/prisma';
+import { ensureTestNeighbourhood } from './helpers';
 
 const TIMEOUT_MS = 20_000;
 
@@ -47,7 +48,7 @@ const ZONE_B = {
 async function makeAdmin(app: ReturnType<typeof createApp>, email: string): Promise<{ token: string; id: string }> {
   const signup = await request(app)
     .post('/auth/signup')
-    .send({ email, password: 'sup3rstrongpass', displayName: 'Admin' });
+    .send({ email, password: 'sup3rstrongpass', displayName: 'Admin', neighbourhoodId: await ensureTestNeighbourhood() });
   const { user } = signup.body as AuthBody;
   await prisma.user.update({ where: { id: user.id }, data: { role: 'ADMIN' } });
   const relogin = await request(app)

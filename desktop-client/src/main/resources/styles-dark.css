@@ -1,0 +1,72 @@
+.root {
+    -fx-font-family: "Segoe UI", "Ubuntu", sans-serif;
+    -fx-font-size: 13px;
+    -fx-background-color: #0f172a;
+    -fx-accent: #38bdf8;
+}
+
+.label-title {
+    -fx-font-size: 18px;
+    -fx-font-weight: bold;
+    -fx-text-fill: #f8fafc;
+}
+
+.label-muted {
+    -fx-text-fill: #94a3b8;
+}
+
+.label-error {
+    -fx-text-fill: #fca5a5;
+}
+
+.label-success {
+    -fx-text-fill: #86efac;
+}
+
+.toolbar,
+.panel {
+    -fx-background-color: #111827;
+    -fx-border-color: #1f2937;
+}
+
+.toolbar {
+    -fx-border-width: 0 0 1 0;
+}
+
+.panel {
+    -fx-background-radius: 8;
+    -fx-border-radius: 8;
+}
+
+.button-primary {
+    -fx-background-color: #38bdf8;
+    -fx-text-fill: #0f172a;
+    -fx-padding: 8 16 8 16;
+    -fx-background-radius: 6;
+}
+
+.button-primary:hover {
+    -fx-background-color: #0ea5e9;
+}
+
+.button-secondary {
+    -fx-background-color: #1f2937;
+    -fx-text-fill: #e2e8f0;
+    -fx-padding: 8 16 8 16;
+    -fx-background-radius: 6;
+}
+
+.button-secondary:hover {
+    -fx-background-color: #334155;
+}
+
+.text-area,
+.table-view {
+    -fx-background-color: #0f172a;
+}
+
+.text-area-mono {
+    -fx-font-family: "Consolas", "DejaVu Sans Mono", monospace;
+    -fx-font-size: 12px;
+    -fx-text-fill: #e2e8f0;
+}

@@ -4,6 +4,7 @@
 import request from 'supertest';
 import { createApp } from '../src/http/app';
 import { prisma } from '../src/db/prisma';
+import { ensureTestNeighbourhood } from './helpers';
 
 const TIMEOUT_MS = 20_000;
 const EMAIL = `__test__${Date.now()}@example.com`;
@@ -26,6 +27,7 @@ describe('Auth flow', () => {
 
   afterAll(async () => {
     if (userId) {
+      await prisma.pointTransaction.deleteMany({ where: { toUserId: userId } });
       await prisma.session.deleteMany({ where: { userId } });
       await prisma.user.delete({ where: { id: userId } });
     }
@@ -35,7 +37,7 @@ describe('Auth flow', () => {
   it('signup creates user and returns tokens', async () => {
     const res = await request(app)
       .post('/auth/signup')
-      .send({ email: EMAIL, password: PASSWORD, displayName: 'Test User' });
+      .send({ email: EMAIL, password: PASSWORD, displayName: 'Test User', neighbourhoodId: await ensureTestNeighbourhood() });
     const body = res.body as AuthBody;
 
     expect(res.status).toBe(201);
@@ -46,6 +48,30 @@ describe('Auth flow', () => {
 
     userId = body.user.id;
     refreshToken = body.refreshToken;
+
+    const row = await prisma.user.findUnique({ where: { id: userId } });
+    expect(row?.neighbourhoodId).toBeTruthy();
+    expect(row?.pointsBalance).toBe(100);
+    const bonus = await prisma.pointTransaction.findFirst({
+      where: { toUserId: userId, reason: 'WELCOME_BONUS' },
+    });
+    expect(bonus?.amount).toBe(100);
+  });
+
+  it('signup rejects a missing or unknown neighbourhood', async () => {
+    const missing = await request(app)
+      .post('/auth/signup')
+      .send({ email: `__test__nb_${Date.now()}@example.com`, password: PASSWORD, displayName: 'X' });
+    expect(missing.status).toBe(400);
+
+    const unknown = await request(app).post('/auth/signup').send({
+      email: `__test__nb2_${Date.now()}@example.com`,
+      password: PASSWORD,
+      displayName: 'X',
+      neighbourhoodId: '00000000-0000-4000-8000-000000000bad',
+    });
+    expect(unknown.status).toBe(400);
+    expect((unknown.body as { error: string }).error).toBe('invalid_neighbourhood');
   });
 
   it('login with right credentials returns tokens', async () => {

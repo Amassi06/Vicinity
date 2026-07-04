@@ -4,6 +4,7 @@ import { Router } from 'express';
 import { z } from 'zod';
 import { requireAuth } from '../../auth/middleware.js';
 import { castVote, createPoll, getPoll, listPolls } from '../../polls/service.js';
+import { registerModule } from '../../plugins/module-registry.js';
 
 export const pollsRouter = Router();
 
@@ -31,7 +32,7 @@ pollsRouter.get('/polls/:id', requireAuth, async (req, res) => {
     return;
   }
 
-  const envelope = await getPoll(id);
+  const envelope = await getPoll(id, req.auth!.sub);
   if (!envelope) {
     res.status(404).json({ error: 'not_found' });
     return;
@@ -67,12 +68,17 @@ pollsRouter.post('/polls/:id/vote', requireAuth, async (req, res) => {
       res.status(404).json({ error: 'not_found' });
       return;
     }
-    res.status(201).json(ballot);
+    res.status(200).json(ballot);
   } catch (err) {
     const msg = err instanceof Error ? err.message : 'vote_failed';
     if (msg === 'poll_closed') res.status(409).json({ error: msg });
-    else if (msg === 'already_voted') res.status(409).json({ error: msg });
     else if (msg === 'invalid_body' || msg === 'invalid_choice') res.status(400).json({ error: msg });
     else throw err;
   }
+});
+
+registerModule({
+  id: 'polls',
+  description: 'Votes configurables/extensibles via plugins.',
+  router: pollsRouter,
 });

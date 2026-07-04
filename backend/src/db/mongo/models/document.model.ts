@@ -45,7 +45,7 @@ const DocumentSchema = new Schema<DocumentEntity>(
   {
     ownerId: { type: String, required: true, index: true },
     title: { type: String, required: true },
-    storageKey: { type: String, required: true, unique: true },
+    storageKey: { type: String, required: true, index: true },
     contentType: { type: String, required: true },
     sha256: { type: String, required: true, index: true },
     status: {

@@ -16,6 +16,34 @@ function getSocketUser(socket: Socket): string {
 
 let ioSingleton: IOServer | null = null;
 
+// Registre de présence : userId -> nombre de sockets connectés (multi-onglets).
+const onlineCounts = new Map<string, number>();
+
+function markOnline(userId: string): boolean {
+  const prev = onlineCounts.get(userId) ?? 0;
+  onlineCounts.set(userId, prev + 1);
+  return prev === 0;
+}
+
+function markOffline(userId: string): boolean {
+  const prev = onlineCounts.get(userId) ?? 0;
+  if (prev <= 1) {
+    onlineCounts.delete(userId);
+    return prev === 1;
+  }
+  onlineCounts.set(userId, prev - 1);
+  return false;
+}
+
+/** Liste des identifiants d'utilisateurs actuellement connectés. */
+export function onlineUserIds(): string[] {
+  return [...onlineCounts.keys()];
+}
+
+export function isUserOnline(userId: string): boolean {
+  return onlineCounts.has(userId);
+}
+
 function convRoom(conversationId: string): string {
   return `conv:${conversationId}`;
 }
@@ -59,6 +87,12 @@ export function attachSocketHttp(httpServer: HttpServer): IOServer {
 
   io.on('connection', (socket) => {
     const userId = getSocketUser(socket);
+    // Présence globale : notifie tout le monde quand un habitant passe en ligne.
+    if (userId !== '' && markOnline(userId)) {
+      io.emit('presence:global', { userId, status: 'online' });
+    }
+    socket.emit('presence:snapshot', { online: onlineUserIds() });
+
     socket.on('conversation:join', (payload: unknown, ack?: (r: unknown) => void) => {
       const parsed = parseJoinPayload(payload);
       if (!parsed || userId === '') {
@@ -92,6 +126,12 @@ export function attachSocketHttp(httpServer: HttpServer): IOServer {
         if (!room.startsWith('conv:')) continue;
         const conversationId = room.slice('conv:'.length);
         socket.to(room).emit('presence', { conversationId, userId, status: 'offline' });
+      }
+    });
+
+    socket.on('disconnect', () => {
+      if (userId !== '' && markOffline(userId)) {
+        io.emit('presence:global', { userId, status: 'offline' });
       }
     });
   });

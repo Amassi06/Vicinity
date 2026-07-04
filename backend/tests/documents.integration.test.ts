@@ -9,6 +9,7 @@ import { createApp } from '../src/http/app';
 import { prisma } from '../src/db/prisma';
 import { connectMongo, disconnectMongo } from '../src/db/mongo/connection';
 import { DocumentModel } from '../src/db/mongo/models';
+import { ensureTestNeighbourhood } from './helpers';
 
 const TIMEOUT_MS = 30_000;
 const STAMP = Date.now();
@@ -40,7 +41,7 @@ interface DocResp {
 async function signup(app: ReturnType<typeof createApp>, email: string): Promise<AuthBody> {
   const res = await request(app)
     .post('/auth/signup')
-    .send({ email, password: PASSWORD, displayName: email });
+    .send({ email, password: PASSWORD, displayName: email, neighbourhoodId: await ensureTestNeighbourhood() });
   return res.body as AuthBody;
 }
 
@@ -87,6 +88,7 @@ describe('Documents — upload, zones, signature MFA', () => {
 
   afterAll(async () => {
     if (documentId) await DocumentModel.deleteOne({ _id: documentId });
+    await DocumentModel.deleteMany({ title: /^__test__ duplicate content/ });
     const ids = [ownerId, signerId].filter(Boolean);
     if (ids.length) {
       await prisma.auditLog.deleteMany({ where: { userId: { in: ids } } });
@@ -116,6 +118,43 @@ describe('Documents — upload, zones, signature MFA', () => {
     expect(body.status).toBe('draft');
     expect(body.sha256).toMatch(/^[0-9a-f]{64}$/);
     documentId = body._id;
+  });
+
+  /**
+   * Régression : deux documents avec exactement le même contenu binaire
+   * partagent le même storageKey (clé de stockage adressée par contenu).
+   * Ça doit rester possible (chaque upload crée son propre enregistrement
+   * Mongo) et ne doit jamais faire planter le serveur.
+   */
+  it('uploading identical file content twice does not crash and creates two records', async () => {
+    const IDENTICAL_PDF = Buffer.concat([
+      Buffer.from('%PDF-1.4\n'),
+      Buffer.from('duplicate-content-fixture\n'),
+      Buffer.from('%%EOF'),
+    ]);
+
+    const first = await request(app)
+      .post('/documents')
+      .set('Authorization', `Bearer ${ownerToken}`)
+      .field('title', '__test__ duplicate content 1')
+      .attach('file', IDENTICAL_PDF, { filename: 'dup1.pdf', contentType: 'application/pdf' });
+    expect(first.status).toBe(201);
+
+    const second = await request(app)
+      .post('/documents')
+      .set('Authorization', `Bearer ${ownerToken}`)
+      .field('title', '__test__ duplicate content 2')
+      .attach('file', IDENTICAL_PDF, { filename: 'dup2.pdf', contentType: 'application/pdf' });
+    expect(second.status).toBe(201);
+
+    const firstBody = first.body as DocResp;
+    const secondBody = second.body as DocResp;
+    expect(secondBody._id).not.toBe(firstBody._id);
+    expect(secondBody.sha256).toBe(firstBody.sha256);
+
+    // le serveur doit toujours répondre normalement après ces deux uploads
+    const health = await request(app).get('/healthz');
+    expect(health.status).toBe(200);
   });
 
   it('POST /documents/:id/zones (owner) defines signature zones and adds participants', async () => {
@@ -216,5 +255,106 @@ describe('Documents — upload, zones, signature MFA', () => {
     expect(res.status).toBe(403);
     await prisma.session.deleteMany({ where: { userId: other.user.id } });
     await prisma.user.delete({ where: { id: other.user.id } });
+  });
+
+  it('concurrent POST /documents/:id/zones only lets one request transition the draft', async () => {
+    const upload = await request(app)
+      .post('/documents')
+      .set('Authorization', `Bearer ${ownerToken}`)
+      .field('title', '__test__ concurrent zones')
+      .attach('file', FAKE_PDF, { filename: 'race.pdf', contentType: 'application/pdf' });
+    const raceDocId = (upload.body as DocResp)._id;
+
+    const zonesPayload = {
+      zones: [{ page: 1, x: 10, y: 10, width: 50, height: 20, required: true }],
+    };
+    const [first, second] = await Promise.all([
+      request(app)
+        .post(`/documents/${raceDocId}/zones`)
+        .set('Authorization', `Bearer ${ownerToken}`)
+        .send(zonesPayload),
+      request(app)
+        .post(`/documents/${raceDocId}/zones`)
+        .set('Authorization', `Bearer ${ownerToken}`)
+        .send(zonesPayload),
+    ]);
+    const statuses = [first.status, second.status].sort();
+    expect(statuses).toEqual([200, 409]);
+
+    await DocumentModel.deleteOne({ _id: raceDocId });
+  });
+
+  it('concurrent signature attempts on the same zone only let one succeed', async () => {
+    const upload = await request(app)
+      .post('/documents')
+      .set('Authorization', `Bearer ${ownerToken}`)
+      .field('title', '__test__ concurrent sign')
+      .attach('file', FAKE_PDF, { filename: 'race-sign.pdf', contentType: 'application/pdf' });
+    const raceDocId = (upload.body as DocResp)._id;
+
+    await request(app)
+      .post(`/documents/${raceDocId}/zones`)
+      .set('Authorization', `Bearer ${ownerToken}`)
+      .send({
+        zones: [{ page: 1, x: 10, y: 10, width: 50, height: 20, required: true }],
+        participants: [signerId],
+      });
+
+    const totp = authenticator.generate(signerMfaSecret);
+    const [first, second] = await Promise.all([
+      request(app)
+        .post(`/documents/${raceDocId}/zones/0/sign`)
+        .set('Authorization', `Bearer ${signerToken}`)
+        .send({ token: totp }),
+      request(app)
+        .post(`/documents/${raceDocId}/zones/0/sign`)
+        .set('Authorization', `Bearer ${signerToken}`)
+        .send({ token: totp }),
+    ]);
+    const statuses = [first.status, second.status].sort();
+    expect(statuses).toEqual([200, 409]);
+
+    await DocumentModel.deleteOne({ _id: raceDocId });
+  });
+
+  it('locks out signature attempts after repeated invalid TOTP codes', async () => {
+    const rateLimited = await signup(app, `__doc_ratelimit_${STAMP}@example.com`);
+    const rateLimitedSecret = await enrollAndActivateMfa(app, rateLimited.accessToken);
+    const relogin = await request(app)
+      .post('/auth/login')
+      .send({ email: `__doc_ratelimit_${STAMP}@example.com`, password: PASSWORD });
+    const rateLimitedToken = (relogin.body as AuthBody).accessToken;
+
+    const upload = await request(app)
+      .post('/documents')
+      .set('Authorization', `Bearer ${rateLimitedToken}`)
+      .field('title', '__test__ rate limit')
+      .attach('file', FAKE_PDF, { filename: 'rate-limit.pdf', contentType: 'application/pdf' });
+    const rlDocId = (upload.body as DocResp)._id;
+    await request(app)
+      .post(`/documents/${rlDocId}/zones`)
+      .set('Authorization', `Bearer ${rateLimitedToken}`)
+      .send({ zones: [{ page: 1, x: 10, y: 10, width: 50, height: 20, required: true }] });
+
+    for (let i = 0; i < 5; i += 1) {
+      const res = await request(app)
+        .post(`/documents/${rlDocId}/zones/0/sign`)
+        .set('Authorization', `Bearer ${rateLimitedToken}`)
+        .send({ token: '000000' });
+      expect(res.status).toBe(401);
+    }
+
+    const validTotp = authenticator.generate(rateLimitedSecret);
+    const lockedOut = await request(app)
+      .post(`/documents/${rlDocId}/zones/0/sign`)
+      .set('Authorization', `Bearer ${rateLimitedToken}`)
+      .send({ token: validTotp });
+    expect(lockedOut.status).toBe(429);
+    expect((lockedOut.body as { error: string }).error).toBe('rate_limited');
+
+    await DocumentModel.deleteOne({ _id: rlDocId });
+    await prisma.session.deleteMany({ where: { userId: rateLimited.user.id } });
+    await prisma.auditLog.deleteMany({ where: { userId: rateLimited.user.id } });
+    await prisma.user.deleteMany({ where: { id: rateLimited.user.id } });
   });
 });

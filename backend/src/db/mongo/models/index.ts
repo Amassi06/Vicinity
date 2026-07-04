@@ -5,3 +5,4 @@ export { ListingModel, type ListingEntity } from './listing.model.js';
 export { ContractModel, type ContractEntity } from './contract.model.js';
 export { PollModel, type PollEntity } from './poll.model.js';
 export { VoteModel, type VoteEntity } from './vote.model.js';
+export { IncidentModel, type IncidentEntity } from './incident.model.js';

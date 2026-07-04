@@ -1,5 +1,10 @@
 import { FormEvent, useCallback, useEffect, useState, type ReactElement } from 'react';
 import { apiFetch, getAccessToken } from '../lib/api.js';
+import { Button } from '@/components/ui/button.js';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card.js';
+import { Input } from '@/components/ui/input.js';
+import { Alert, AlertDescription } from '@/components/ui/alert.js';
+import { Badge } from '@/components/ui/badge.js';
 
 type DocRow = { _id: string; title: string; status: string };
 
@@ -38,23 +43,44 @@ export function DocumentsAdminPage(): ReactElement {
   }
 
   return (
-    <section className="panel">
-      <h1 style={{ marginTop: 0 }}>Documents PDF (admin)</h1>
-      <form className="inline-form" onSubmit={(e) => void upload(e)}>
-        <input value={title} onChange={(e) => setTitle(e.target.value)} placeholder="Titre" required />
-        <input type="file" accept="application/pdf" onChange={(e) => setFile(e.target.files?.[0] ?? null)} />
-        <button type="submit" className="primary">
-          Téléverser
-        </button>
-      </form>
-      <ul className="item-list">
-        {items.map((d) => (
-          <li key={d._id}>
-            {d.title} — {d.status}
-          </li>
-        ))}
-      </ul>
-      {err ? <p className="error-msg">{err}</p> : null}
-    </section>
+    <Card className="m-6">
+      <CardHeader>
+        <CardTitle className="text-xl">Documents PDF (admin)</CardTitle>
+      </CardHeader>
+      <CardContent className="space-y-4">
+        <form className="flex flex-wrap items-center gap-2" onSubmit={(e) => void upload(e)}>
+          <Input className="max-w-56" value={title} onChange={(e) => setTitle(e.target.value)} placeholder="Titre" required />
+          <Input
+            type="file"
+            className="max-w-56"
+            accept="application/pdf"
+            onChange={(e) => setFile(e.target.files?.[0] ?? null)}
+          />
+          <Button type="submit">Téléverser</Button>
+        </form>
+        {items.length === 0 ? (
+          <div className="rounded-lg border border-dashed border-input p-8 text-center text-muted-foreground">
+            Aucun document pour l'instant.
+          </div>
+        ) : (
+          <ul className="space-y-2">
+            {items.map((d) => (
+              <li
+                key={d._id}
+                className="flex flex-wrap items-center gap-2 rounded-lg border border-border bg-background/40 p-4 transition-colors hover:border-primary/40"
+              >
+                <span className="font-medium">{d.title}</span>
+                <Badge variant="secondary">{d.status}</Badge>
+              </li>
+            ))}
+          </ul>
+        )}
+        {err ? (
+          <Alert variant="destructive">
+            <AlertDescription>{err}</AlertDescription>
+          </Alert>
+        ) : null}
+      </CardContent>
+    </Card>
   );
 }

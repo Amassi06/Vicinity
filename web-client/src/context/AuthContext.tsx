@@ -18,17 +18,45 @@ import {
   type AuthTokensResponse,
 } from '../lib/api.js';
 
-type MePayload = AuthUser & { mfa?: boolean };
+type MePayload = {
+  sub: string;
+  email: string;
+  displayName: string;
+  role: string;
+  mfa?: boolean;
+  neighbourhoodId: string | null;
+  neighbourhoodName: string | null;
+};
+
+/** Espace habitant : les comptes staff se connectent sur le back-office, pas ici. */
+const STAFF_ROLES = ['ADMIN', 'MODERATOR'];
 
 type AuthContextValue = {
   ready: boolean;
   user: AuthUser | null;
-  login: (email: string, password: string) => Promise<void>;
-  register: (email: string, password: string, displayName: string) => Promise<void>;
+  login: (email: string, password: string, mfaToken?: string) => Promise<void>;
+  register: (
+    email: string,
+    password: string,
+    displayName: string,
+    neighbourhoodId: string,
+  ) => Promise<void>;
   logout: () => Promise<void>;
+  refreshUser: () => Promise<void>;
 };
 
 const Ctx = createContext<AuthContextValue | null>(null);
+
+function toAuthUser(me: MePayload): AuthUser {
+  return {
+    sub: me.sub,
+    email: me.email,
+    displayName: me.displayName,
+    role: me.role,
+    neighbourhoodId: me.neighbourhoodId,
+    neighbourhoodName: me.neighbourhoodName,
+  };
+}
 
 export function AuthProvider({ children }: { children: ReactNode }): ReactElement {
   const [ready, setReady] = useState(false);
@@ -42,7 +70,12 @@ export function AuthProvider({ children }: { children: ReactNode }): ReactElemen
     }
     try {
       const me = await apiFetch<MePayload>('/auth/me');
-      setUser({ sub: me.sub, email: me.email, role: me.role });
+      if (STAFF_ROLES.includes(me.role)) {
+        clearStored();
+        setUser(null);
+      } else {
+        setUser(toAuthUser(me));
+      }
     } catch {
       clearStored();
       setUser(null);
@@ -62,21 +95,27 @@ export function AuthProvider({ children }: { children: ReactNode }): ReactElemen
     return () => window.removeEventListener('focus', onFocus);
   }, [hydrate]);
 
-  const login = useCallback(async (email: string, password: string) => {
-    const r = await authPostJson<AuthTokensResponse>('/auth/login', { email, password });
+  const login = useCallback(async (email: string, password: string, mfaToken?: string) => {
+    const r = await authPostJson<AuthTokensResponse>('/auth/login', { email, password, mfaToken });
+    if (STAFF_ROLES.includes(r.user.role)) {
+      throw new Error('forbidden_role');
+    }
     persistTokens(r.accessToken, r.refreshToken);
-    setUser({ sub: r.user.id, email: r.user.email, role: r.user.role });
+    const me = await apiFetch<MePayload>('/auth/me');
+    setUser(toAuthUser(me));
   }, []);
 
   const register = useCallback(
-    async (email: string, password: string, displayName: string) => {
+    async (email: string, password: string, displayName: string, neighbourhoodId: string) => {
       const r = await authPostJson<AuthTokensResponse>('/auth/signup', {
         email,
         password,
         displayName,
+        neighbourhoodId,
       });
       persistTokens(r.accessToken, r.refreshToken);
-      setUser({ sub: r.user.id, email: r.user.email, role: r.user.role });
+      const me = await apiFetch<MePayload>('/auth/me');
+      setUser(toAuthUser(me));
     },
     [],
   );
@@ -105,8 +144,9 @@ export function AuthProvider({ children }: { children: ReactNode }): ReactElemen
       login,
       register,
       logout: logoutCb,
+      refreshUser: hydrate,
     }),
-    [ready, user, login, register, logoutCb],
+    [ready, user, login, register, logoutCb, hydrate],
   );
 
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;

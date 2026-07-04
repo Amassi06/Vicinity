@@ -1,6 +1,10 @@
 import { FormEvent, useState, type ReactElement } from 'react';
 import { apiFetch } from '../lib/api.js';
 import { useAuth } from '../context/AuthContext.js';
+import { Button } from '@/components/ui/button.js';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card.js';
+import { Input } from '@/components/ui/input.js';
+import { Alert, AlertDescription } from '@/components/ui/alert.js';
 
 export function WalletAdminPage(): ReactElement {
   const { user } = useAuth();
@@ -10,7 +14,11 @@ export function WalletAdminPage(): ReactElement {
   const [err, setErr] = useState<string | null>(null);
 
   if (user?.role !== 'ADMIN') {
-    return <p className="admin-warn">Réservé aux administrateurs.</p>;
+    return (
+      <Alert variant="destructive" className="m-6">
+        <AlertDescription>Réservé aux administrateurs.</AlertDescription>
+      </Alert>
+    );
   }
 
   async function submit(ev: FormEvent): Promise<void> {
@@ -33,28 +41,36 @@ export function WalletAdminPage(): ReactElement {
   }
 
   return (
-    <section className="panel">
-      <h1 style={{ marginTop: 0 }}>Crédit portefeuille</h1>
-      <form className="inline-form" onSubmit={(e) => void submit(e)}>
-        <input
-          placeholder="UUID utilisateur"
-          value={toUserId}
-          onChange={(e) => setToUserId(e.target.value)}
-          required
-        />
-        <input
-          type="number"
-          min={1}
-          value={amount}
-          onChange={(e) => setAmount(e.target.value)}
-          required
-        />
-        <button type="submit" className="primary">
-          Créditer
-        </button>
-      </form>
-      {msg ? <p>{msg}</p> : null}
-      {err ? <p className="error-msg">{err}</p> : null}
-    </section>
+    <Card className="m-6">
+      <CardHeader>
+        <CardTitle className="text-xl">Crédit portefeuille</CardTitle>
+      </CardHeader>
+      <CardContent className="space-y-4">
+        <form className="flex flex-wrap items-center gap-2" onSubmit={(e) => void submit(e)}>
+          <Input
+            className="max-w-72"
+            placeholder="UUID utilisateur"
+            value={toUserId}
+            onChange={(e) => setToUserId(e.target.value)}
+            required
+          />
+          <Input
+            type="number"
+            className="max-w-32"
+            min={1}
+            value={amount}
+            onChange={(e) => setAmount(e.target.value)}
+            required
+          />
+          <Button type="submit">Créditer</Button>
+        </form>
+        {msg ? <p>{msg}</p> : null}
+        {err ? (
+          <Alert variant="destructive">
+            <AlertDescription>{err}</AlertDescription>
+          </Alert>
+        ) : null}
+      </CardContent>
+    </Card>
   );
 }

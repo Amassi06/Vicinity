@@ -1,8 +1,10 @@
 package com.vicinity.desktop.store;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.vicinity.desktop.api.dto.Incident;
 import com.vicinity.desktop.api.dto.MeResponse;
 import com.vicinity.desktop.api.dto.Neighbourhood;
+import com.vicinity.desktop.api.dto.Stats;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.sql.Connection;
@@ -55,6 +57,43 @@ public final class LocalStore {
                       synced_at TIMESTAMP NOT NULL
                     )
                     """);
+                        st.execute(
+                                        """
+                                        CREATE TABLE IF NOT EXISTS app_settings (
+                                            setting_key VARCHAR(120) PRIMARY KEY,
+                                            setting_value CLOB NOT NULL,
+                                            updated_at TIMESTAMP NOT NULL
+                                        )
+                                        """);
+            st.execute(
+                    """
+                    CREATE TABLE IF NOT EXISTS incidents_cache (
+                      id VARCHAR(36) PRIMARY KEY,
+                      neighbourhood_id VARCHAR(36) NOT NULL,
+                      status VARCHAR(20) NOT NULL,
+                      payload_json CLOB NOT NULL,
+                      remote_updated_at VARCHAR(60),
+                      synced_at TIMESTAMP NOT NULL
+                    )
+                    """);
+            st.execute(
+                    """
+                    CREATE TABLE IF NOT EXISTS incident_outbox (
+                      id VARCHAR(36) PRIMARY KEY,
+                      incident_id VARCHAR(36) NOT NULL,
+                      new_status VARCHAR(20) NOT NULL,
+                      base_updated_at VARCHAR(60),
+                      queued_at TIMESTAMP NOT NULL
+                    )
+                    """);
+            st.execute(
+                    """
+                    CREATE TABLE IF NOT EXISTS stats_cache (
+                      neighbourhood_id VARCHAR(36) PRIMARY KEY,
+                      payload_json CLOB NOT NULL,
+                      synced_at TIMESTAMP NOT NULL
+                    )
+                    """);
         }
     }
 
@@ -103,6 +142,49 @@ public final class LocalStore {
         } catch (SQLException e) {
             throw new IllegalStateException("Impossible d'effacer la session", e);
         }
+    }
+
+    public static void saveSetting(final String key, final String value) {
+        try (Connection conn = connection();
+                PreparedStatement ps =
+                        conn.prepareStatement(
+                                """
+                                MERGE INTO app_settings (setting_key, setting_value, updated_at)
+                                KEY (setting_key)
+                                VALUES (?, ?, CURRENT_TIMESTAMP)
+                                """)) {
+            ps.setString(1, key);
+            ps.setString(2, value);
+            ps.executeUpdate();
+        } catch (SQLException e) {
+            throw new IllegalStateException("Impossible de sauvegarder le paramètre " + key, e);
+        }
+    }
+
+    public static String loadSetting(final String key, final String defaultValue) {
+        try (Connection conn = connection();
+                PreparedStatement ps =
+                        conn.prepareStatement(
+                                "SELECT setting_value FROM app_settings WHERE setting_key = ?")) {
+            ps.setString(1, key);
+            try (ResultSet rs = ps.executeQuery()) {
+                if (rs.next()) {
+                    final String value = rs.getString("setting_value");
+                    return value == null || value.isBlank() ? defaultValue : value;
+                }
+            }
+        } catch (SQLException e) {
+            throw new IllegalStateException("Impossible de lire le paramètre " + key, e);
+        }
+        return defaultValue;
+    }
+
+    public static String loadThemeMode() {
+        return loadSetting("theme_mode", "light");
+    }
+
+    public static void saveThemeMode(final String themeMode) {
+        saveSetting("theme_mode", themeMode == null || themeMode.isBlank() ? "light" : themeMode);
     }
 
     public static void replaceNeighbourhoods(final List<Neighbourhood> items) {
@@ -166,6 +248,166 @@ public final class LocalStore {
         }
         return Optional.empty();
     }
+
+    public static void replaceIncidents(final String neighbourhoodId, final List<Incident> items) {
+        try (Connection conn = connection()) {
+            conn.setAutoCommit(false);
+            try (PreparedStatement clear =
+                    conn.prepareStatement("DELETE FROM incidents_cache WHERE neighbourhood_id = ?")) {
+                clear.setString(1, neighbourhoodId);
+                clear.executeUpdate();
+            }
+            try (PreparedStatement ps =
+                    conn.prepareStatement(
+                            """
+                            INSERT INTO incidents_cache
+                              (id, neighbourhood_id, status, payload_json, remote_updated_at, synced_at)
+                            VALUES (?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+                            """)) {
+                for (final Incident i : items) {
+                    ps.setString(1, i.id());
+                    ps.setString(2, neighbourhoodId);
+                    ps.setString(3, i.status());
+                    ps.setString(4, MAPPER.writeValueAsString(i));
+                    ps.setString(5, i.updatedAt());
+                    ps.addBatch();
+                }
+                ps.executeBatch();
+            }
+            conn.commit();
+        } catch (Exception e) {
+            throw new IllegalStateException("Impossible de mettre en cache les incidents", e);
+        }
+    }
+
+    public static List<Incident> loadIncidents(final String neighbourhoodId) {
+        final List<Incident> out = new ArrayList<>();
+        try (Connection conn = connection();
+                PreparedStatement ps =
+                        conn.prepareStatement(
+                                """
+                                SELECT payload_json FROM incidents_cache
+                                WHERE neighbourhood_id = ?
+                                ORDER BY synced_at DESC
+                                """)) {
+            ps.setString(1, neighbourhoodId);
+            try (ResultSet rs = ps.executeQuery()) {
+                while (rs.next()) {
+                    out.add(MAPPER.readValue(rs.getString("payload_json"), Incident.class));
+                }
+            }
+        } catch (Exception e) {
+            throw new IllegalStateException("Impossible de lire le cache incidents", e);
+        }
+        return out;
+    }
+
+    /** Ajout hors-ligne : file d'attente d'un changement de statut à rejouer à la prochaine sync. */
+    public static void queueStatusChange(
+            final String incidentId, final String newStatus, final String baseUpdatedAt) {
+        try (Connection conn = connection();
+                PreparedStatement ps =
+                        conn.prepareStatement(
+                                """
+                                INSERT INTO incident_outbox
+                                  (id, incident_id, new_status, base_updated_at, queued_at)
+                                VALUES (?, ?, ?, ?, CURRENT_TIMESTAMP)
+                                """)) {
+            ps.setString(1, java.util.UUID.randomUUID().toString());
+            ps.setString(2, incidentId);
+            ps.setString(3, newStatus);
+            ps.setString(4, baseUpdatedAt);
+            ps.executeUpdate();
+        } catch (SQLException e) {
+            throw new IllegalStateException("Impossible de mettre en file l'action hors-ligne", e);
+        }
+    }
+
+    public static List<OutboxEntry> loadOutbox() {
+        final List<OutboxEntry> out = new ArrayList<>();
+        try (Connection conn = connection();
+                PreparedStatement ps =
+                        conn.prepareStatement(
+                                "SELECT id, incident_id, new_status, base_updated_at FROM incident_outbox");
+                ResultSet rs = ps.executeQuery()) {
+            while (rs.next()) {
+                out.add(
+                        new OutboxEntry(
+                                rs.getString("id"),
+                                rs.getString("incident_id"),
+                                rs.getString("new_status"),
+                                rs.getString("base_updated_at")));
+            }
+        } catch (SQLException e) {
+            throw new IllegalStateException("Impossible de lire la file hors-ligne", e);
+        }
+        return out;
+    }
+
+    public static void clearOutboxEntry(final String id) {
+        try (Connection conn = connection();
+                PreparedStatement ps =
+                        conn.prepareStatement("DELETE FROM incident_outbox WHERE id = ?")) {
+            ps.setString(1, id);
+            ps.executeUpdate();
+        } catch (SQLException e) {
+            throw new IllegalStateException("Impossible de vider la file hors-ligne", e);
+        }
+    }
+
+    public static void saveStats(final String neighbourhoodId, final Stats stats) {
+        try (Connection conn = connection();
+                PreparedStatement ps =
+                        conn.prepareStatement(
+                                """
+                                MERGE INTO stats_cache (neighbourhood_id, payload_json, synced_at)
+                                KEY (neighbourhood_id)
+                                VALUES (?, ?, CURRENT_TIMESTAMP)
+                                """)) {
+            ps.setString(1, neighbourhoodId);
+            ps.setString(2, MAPPER.writeValueAsString(stats));
+            ps.executeUpdate();
+        } catch (Exception e) {
+            throw new IllegalStateException("Impossible de mettre en cache les statistiques", e);
+        }
+    }
+
+    public static Optional<Stats> loadStats(final String neighbourhoodId) {
+        try (Connection conn = connection();
+                PreparedStatement ps =
+                        conn.prepareStatement(
+                                "SELECT payload_json FROM stats_cache WHERE neighbourhood_id = ?")) {
+            ps.setString(1, neighbourhoodId);
+            try (ResultSet rs = ps.executeQuery()) {
+                if (rs.next()) {
+                    return Optional.of(MAPPER.readValue(rs.getString("payload_json"), Stats.class));
+                }
+            }
+        } catch (Exception e) {
+            throw new IllegalStateException("Impossible de lire le cache statistiques", e);
+        }
+        return Optional.empty();
+    }
+
+    /** Supprime toutes les données locales (répertoire H2) — utilisé par la désinstallation. */
+    public static void wipeAllLocalData() throws java.io.IOException {
+        final Path dir = Path.of(System.getProperty("user.home"), ".vicinity");
+        jdbcUrl = null;
+        if (!Files.exists(dir)) {
+            return;
+        }
+        try (var walk = Files.walk(dir)) {
+            walk.sorted(java.util.Comparator.reverseOrder()).forEach(p -> {
+                try {
+                    Files.deleteIfExists(p);
+                } catch (java.io.IOException ignored) {
+                    // best effort
+                }
+            });
+        }
+    }
+
+    public record OutboxEntry(String id, String incidentId, String newStatus, String baseUpdatedAt) {}
 
     private static Connection connection() throws SQLException {
         if (jdbcUrl == null) {

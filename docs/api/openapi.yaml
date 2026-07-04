@@ -1,0 +1,476 @@
+openapi: 3.0.3
+info:
+  title: Vicinity API
+  version: 0.0.0
+  description: |
+    API REST de Vicinity. Le document couvre les routes actives du backend
+    Node.js + Express pour l'authentification, les quartiers, les services,
+    les documents signés, les événements, la messagerie, les votes, le DSL,
+    le RGPD et les plugins.
+servers:
+  - url: http://localhost:3000
+    description: Backend de développement
+security:
+  - bearerAuth: []
+paths:
+  /healthz:
+    get:
+      summary: Liveness probe
+      security: []
+      responses:
+        '200':
+          description: Service en vie
+  /readyz:
+    get:
+      summary: Readiness probe
+      security: []
+      responses:
+        '200':
+          description: Stack prête
+        '503':
+          description: Au moins une dépendance est indisponible
+  /auth/signup:
+    post:
+      summary: Créer un compte
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SignupRequest'
+      responses:
+        '201':
+          description: Compte créé
+  /auth/login:
+    post:
+      summary: Connexion avec mot de passe
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/LoginRequest'
+      responses:
+        '200':
+          description: Jetons émis
+        '401':
+          description: Identifiants invalides
+  /auth/refresh:
+    post:
+      summary: Renouveler les jetons
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RefreshRequest'
+      responses:
+        '200':
+          description: Jetons renouvelés
+        '401':
+          description: Session invalide
+  /auth/logout:
+    post:
+      summary: Déconnexion
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RefreshRequest'
+      responses:
+        '204':
+          description: Déconnecté
+  /auth/me:
+    get:
+      summary: Profil courant
+      responses:
+        '200':
+          description: Profil utilisateur
+  /auth/mfa/enroll:
+    post:
+      summary: Préparer l'enrôlement MFA
+      responses:
+        '200':
+          description: Secret et QR code
+  /auth/mfa/activate:
+    post:
+      summary: Activer le MFA
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TotpRequest'
+      responses:
+        '204':
+          description: MFA activé
+  /auth/mfa/verify:
+    post:
+      summary: Vérifier un TOTP
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TotpRequest'
+      responses:
+        '200':
+          description: Code valide
+        '401':
+          description: Code invalide
+  /auth/mfa/disable:
+    post:
+      summary: Désactiver le MFA
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TotpRequest'
+      responses:
+        '204':
+          description: MFA désactivé
+  /auth/sso/issue:
+    post:
+      summary: Émettre un jeton SSO pour le client desktop
+      responses:
+        '200':
+          description: Jeton SSO émis
+  /neighbourhoods:
+    get:
+      summary: Lister les quartiers visibles
+      responses:
+        '200':
+          description: Liste des quartiers
+    post:
+      summary: Créer un quartier
+      responses:
+        '201':
+          description: Quartier créé
+  /neighbourhoods/{id}:
+    get:
+      summary: Lire un quartier
+      parameters:
+        - $ref: '#/components/parameters/NeighbourhoodId'
+      responses:
+        '200':
+          description: Quartier
+        '404':
+          description: Introuvable
+    patch:
+      summary: Modifier un quartier
+      parameters:
+        - $ref: '#/components/parameters/NeighbourhoodId'
+      responses:
+        '200':
+          description: Quartier modifié
+    delete:
+      summary: Supprimer un quartier
+      parameters:
+        - $ref: '#/components/parameters/NeighbourhoodId'
+      responses:
+        '204':
+          description: Quartier supprimé
+  /neighbourhoods/lookup/point:
+    get:
+      summary: Rechercher les quartiers contenant un point
+      parameters:
+        - in: query
+          name: lon
+          required: true
+          schema:
+            type: number
+        - in: query
+          name: lat
+          required: true
+          schema:
+            type: number
+      responses:
+        '200':
+          description: Quartiers correspondants
+  /neighbourhoods/{id}/overlaps:
+    get:
+      summary: Lister les chevauchements géographiques
+      parameters:
+        - $ref: '#/components/parameters/NeighbourhoodId'
+      responses:
+        '200':
+          description: Zones qui se chevauchent
+  /me/wallet:
+    get:
+      summary: Consulter le portefeuille courant
+      responses:
+        '200':
+          description: Portefeuille
+  /admin/wallet/credit:
+    post:
+      summary: Créditer un portefeuille en tant qu'administrateur
+      responses:
+        '204':
+          description: Points crédités
+  /documents:
+    get:
+      summary: Lister les documents de l'utilisateur
+      responses:
+        '200':
+          description: Liste des documents
+    post:
+      summary: Importer un PDF
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/DocumentUpload'
+      responses:
+        '201':
+          description: Document importé
+  /documents/{id}:
+    get:
+      summary: Consulter les métadonnées d'un document
+      parameters:
+        - $ref: '#/components/parameters/DocumentId'
+      responses:
+        '200':
+          description: Document
+  /documents/{id}/file:
+    get:
+      summary: Télécharger le PDF original
+      parameters:
+        - $ref: '#/components/parameters/DocumentId'
+      responses:
+        '200':
+          description: Fichier PDF
+  /documents/{id}/zones:
+    post:
+      summary: Définir les zones de signature
+      parameters:
+        - $ref: '#/components/parameters/DocumentId'
+      responses:
+        '200':
+          description: Document mis à jour
+  /documents/{id}/zones/{index}/sign:
+    post:
+      summary: Signer une zone
+      parameters:
+        - $ref: '#/components/parameters/DocumentId'
+        - in: path
+          name: index
+          required: true
+          schema:
+            type: integer
+      responses:
+        '200':
+          description: Signature enregistrée
+  /events:
+    get:
+      summary: Lister les événements publiés
+      responses:
+        '200':
+          description: Événements
+    post:
+      summary: Créer un événement
+      responses:
+        '201':
+          description: Événement créé
+  /events/recommendations:
+    get:
+      summary: Recommandations d'événements
+      responses:
+        '200':
+          description: Suggestions
+  /events/{id}/publish:
+    post:
+      summary: Publier un événement
+      parameters:
+        - $ref: '#/components/parameters/EventId'
+      responses:
+        '200':
+          description: Événement publié
+  /events/{id}/cancel:
+    post:
+      summary: Annuler un événement
+      parameters:
+        - $ref: '#/components/parameters/EventId'
+      responses:
+        '200':
+          description: Événement annulé
+  /events/{id}/interest:
+    post:
+      summary: Marquer un intérêt
+      parameters:
+        - $ref: '#/components/parameters/EventId'
+      responses:
+        '200':
+          description: Intérêt enregistré
+  /events/{id}/decline:
+    post:
+      summary: Décliner un événement
+      parameters:
+        - $ref: '#/components/parameters/EventId'
+      responses:
+        '200':
+          description: Déclinaison enregistrée
+  /conversations/{cid}/messages:
+    get:
+      summary: Lire les messages récents d'une conversation
+      parameters:
+        - $ref: '#/components/parameters/ConversationId'
+      responses:
+        '200':
+          description: Messages
+    post:
+      summary: Envoyer un message
+      parameters:
+        - $ref: '#/components/parameters/ConversationId'
+      responses:
+        '201':
+          description: Message créé
+  /polls:
+    get:
+      summary: Lister les sondages d'un quartier
+      responses:
+        '200':
+          description: Sondages
+    post:
+      summary: Créer un sondage
+      responses:
+        '201':
+          description: Sondage créé
+  /polls/{id}:
+    get:
+      summary: Consulter un sondage
+      parameters:
+        - $ref: '#/components/parameters/PollId'
+      responses:
+        '200':
+          description: Sondage
+  /polls/{id}/vote:
+    post:
+      summary: Voter sur un sondage
+      parameters:
+        - $ref: '#/components/parameters/PollId'
+      responses:
+        '201':
+          description: Vote enregistré
+  /dsl/compile:
+    post:
+      summary: Compiler le DSL Mongo maison
+      responses:
+        '200':
+          description: Requête compilée
+  /me/export:
+    get:
+      summary: Export RGPD des données personnelles
+      responses:
+        '200':
+          description: Export utilisateur
+  /me/delete-account:
+    post:
+      summary: Supprimer le compte courant
+      responses:
+        '204':
+          description: Compte supprimé
+  /me/consents:
+    get:
+      summary: Lire les consentements
+      responses:
+        '200':
+          description: Consentements
+    patch:
+      summary: Mettre à jour les consentements
+      responses:
+        '200':
+          description: Consentements mis à jour
+  /plugins:
+    get:
+      summary: Lister les plugins disponibles
+      responses:
+        '200':
+          description: Catalogue des plugins
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+  parameters:
+    NeighbourhoodId:
+      in: path
+      name: id
+      required: true
+      schema:
+        type: string
+        format: uuid
+    DocumentId:
+      in: path
+      name: id
+      required: true
+      schema:
+        type: string
+    EventId:
+      in: path
+      name: id
+      required: true
+      schema:
+        type: string
+    ConversationId:
+      in: path
+      name: cid
+      required: true
+      schema:
+        type: string
+    PollId:
+      in: path
+      name: id
+      required: true
+      schema:
+        type: string
+  schemas:
+    SignupRequest:
+      type: object
+      required: [email, password, displayName]
+      properties:
+        email:
+          type: string
+          format: email
+        password:
+          type: string
+        displayName:
+          type: string
+    LoginRequest:
+      type: object
+      required: [email, password]
+      properties:
+        email:
+          type: string
+          format: email
+        password:
+          type: string
+    RefreshRequest:
+      type: object
+      required: [refreshToken]
+      properties:
+        refreshToken:
+          type: string
+    TotpRequest:
+      type: object
+      required: [token]
+      properties:
+        token:
+          type: string
+          example: '123456'
+    DocumentUpload:
+      type: object
+      required: [title, file]
+      properties:
+        title:
+          type: string
+        file:
+          type: string
+          format: binary

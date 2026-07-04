@@ -6,6 +6,13 @@ import {
   type MapDrawBridge,
 } from '../components/AdminNeighbourhoodMap.js';
 import type { NeighbourhoodDto, PolygonGeoJson } from '../types/neighbourhood.js';
+import { Button } from '@/components/ui/button.js';
+import { Input } from '@/components/ui/input.js';
+import { Label } from '@/components/ui/label.js';
+import { Textarea } from '@/components/ui/textarea.js';
+import { Alert, AlertDescription } from '@/components/ui/alert.js';
+import { Badge } from '@/components/ui/badge.js';
+import { cn } from '@/lib/utils.js';
 
 /** Centre de secours (échelle quartier, pas vue monde) si la géoloc est refusée. */
 const FALLBACK_MAP_CENTER: [number, number] = [45.764, 4.8357];
@@ -248,50 +255,58 @@ export function AdminNeighbourhoodsPage(): ReactElement {
   }
 
   return (
-    <div className="admin-layout">
-      <aside className="admin-sidebar">
-        <h1 style={{ marginTop: 0, fontSize: '1.15rem' }}>Quartiers (PostGIS)</h1>
-        <p className="admin-lead">
+    <div className="flex min-h-[calc(100vh-52px)]">
+      <aside className="w-[min(340px,38vw)] shrink-0 overflow-auto border-r border-border bg-background/60 p-4">
+        <h1 className="mt-0 text-lg font-semibold">Quartiers (PostGIS)</h1>
+        <p className="text-sm text-muted-foreground">
           Modélisation par polygones GeoJSON. La carte reste cantonnée aux périmètres (ou à votre
           position pour le premier tracé).
         </p>
         {user ? (
-          <p className="role-badge">
-            Connecté : {user.email} — rôle <strong>{user.role}</strong>
+          <p className="my-3 rounded-md border border-border bg-background px-2.5 py-1.5 text-sm">
+            Connecté : {user.email} — rôle <Badge variant="secondary">{user.role}</Badge>
             {user.role !== 'ADMIN' ? ' (lecture seule)' : ''}
           </p>
         ) : null}
         {!isAdmin ? (
-          <p className="admin-warn">
-            Rôle <strong>ADMIN</strong> requis pour créer ou modifier. Mettez à jour{' '}
-            <code>users.role</code> en base puis actualisez (F5).
-          </p>
+          <Alert variant="destructive" className="mb-2">
+            <AlertDescription>
+              Rôle <strong>ADMIN</strong> requis pour créer ou modifier. Mettez à jour{' '}
+              <code>users.role</code> en base puis actualisez (F5).
+            </AlertDescription>
+          </Alert>
         ) : null}
-        {geomHint ? <p className="error-msg">{geomHint}</p> : null}
-        {err ? <p className="error-msg">{err}</p> : null}
-        {msg ? <p>{msg}</p> : null}
+        {geomHint ? (
+          <Alert variant="destructive" className="mb-2">
+            <AlertDescription>{geomHint}</AlertDescription>
+          </Alert>
+        ) : null}
+        {err ? (
+          <Alert variant="destructive" className="mb-2">
+            <AlertDescription>{err}</AlertDescription>
+          </Alert>
+        ) : null}
+        {msg ? <p className="mb-2">{msg}</p> : null}
 
-        <div className="admin-buttons">
-          <button type="button" className="secondary" onClick={() => void reload()}>
+        <div className="my-2.5 flex flex-wrap gap-2">
+          <Button type="button" variant="secondary" onClick={() => void reload()}>
             Recharger
-          </button>
-          <button
-            type="button"
-            className="primary"
-            disabled={!isAdmin || busy}
-            onClick={() => void startDraw()}
-          >
+          </Button>
+          <Button type="button" disabled={!isAdmin || busy} onClick={() => void startDraw()}>
             Nouveau tracé
-          </button>
+          </Button>
         </div>
 
-        <h2 className="section-title">Liste ({items.length})</h2>
-        <ul className="nh-list">
+        <h2 className="mb-2 mt-4 text-base font-semibold">Liste ({items.length})</h2>
+        <ul className="max-h-[28vh] list-none space-y-1 overflow-auto p-0">
           {items.map((n) => (
             <li key={n.id}>
               <button
                 type="button"
-                className={n.id === selectedId ? 'nh-item nh-item-selected' : 'nh-item'}
+                className={cn(
+                  'w-full rounded-md border border-transparent px-2 py-1.5 text-left hover:bg-accent',
+                  n.id === selectedId && 'border-amber-400 bg-amber-400/10',
+                )}
                 onClick={() => setSelectedId(n.id)}
               >
                 {n.name}
@@ -301,65 +316,66 @@ export function AdminNeighbourhoodsPage(): ReactElement {
         </ul>
 
         {draftBoundary ? (
-          <section className="draft-block">
-            <h3>Nouveau quartier</h3>
-            <label htmlFor="dn">Nom</label>
-            <input id="dn" value={draftName} onChange={(e) => setDraftName(e.target.value)} />
-            <label htmlFor="dd">Description</label>
-            <textarea id="dd" rows={2} value={draftDesc} onChange={(e) => setDraftDesc(e.target.value)} />
-            <button
-              type="button"
-              className="primary"
-              disabled={!isAdmin || busy}
-              onClick={() => void submitCreate()}
-            >
-              Créer
-            </button>
-            <button type="button" className="secondary" onClick={() => setDraftBoundary(null)}>
-              Annuler
-            </button>
+          <section className="mt-4 border-t border-dashed border-input pt-3">
+            <h3 className="font-semibold">Nouveau quartier</h3>
+            <div className="mt-2 space-y-1.5">
+              <Label htmlFor="dn">Nom</Label>
+              <Input id="dn" value={draftName} onChange={(e) => setDraftName(e.target.value)} />
+            </div>
+            <div className="mt-2 space-y-1.5">
+              <Label htmlFor="dd">Description</Label>
+              <Textarea id="dd" rows={2} value={draftDesc} onChange={(e) => setDraftDesc(e.target.value)} />
+            </div>
+            <div className="mt-2.5 flex flex-wrap gap-2">
+              <Button type="button" disabled={!isAdmin || busy} onClick={() => void submitCreate()}>
+                Créer
+              </Button>
+              <Button type="button" variant="secondary" onClick={() => setDraftBoundary(null)}>
+                Annuler
+              </Button>
+            </div>
           </section>
         ) : null}
 
         {selected ? (
-          <section className="draft-block">
-            <h3>{selected.name}</h3>
-            <label htmlFor="en">Nom</label>
-            <input id="en" value={editName} onChange={(e) => setEditName(e.target.value)} />
-            <label htmlFor="ed">Description</label>
-            <textarea id="ed" rows={2} value={editDesc} onChange={(e) => setEditDesc(e.target.value)} />
-            <div className="admin-buttons">
-              <button
-                type="button"
-                className="primary"
-                disabled={!isAdmin || busy}
-                onClick={() => void saveMeta()}
-              >
+          <section className="mt-4 border-t border-dashed border-input pt-3">
+            <h3 className="font-semibold">{selected.name}</h3>
+            <div className="mt-2 space-y-1.5">
+              <Label htmlFor="en">Nom</Label>
+              <Input id="en" value={editName} onChange={(e) => setEditName(e.target.value)} />
+            </div>
+            <div className="mt-2 space-y-1.5">
+              <Label htmlFor="ed">Description</Label>
+              <Textarea id="ed" rows={2} value={editDesc} onChange={(e) => setEditDesc(e.target.value)} />
+            </div>
+            <div className="mt-2.5 flex flex-wrap gap-2">
+              <Button type="button" disabled={!isAdmin || busy} onClick={() => void saveMeta()}>
                 Enregistrer
-              </button>
-              <button
+              </Button>
+              <Button
                 type="button"
+                variant="secondary"
                 disabled={!isAdmin || busy}
                 onClick={() => void startReplaceBoundary()}
               >
                 Remplacer contour
-              </button>
-              <button
+              </Button>
+              <Button
                 type="button"
-                className="danger"
+                variant="destructive"
                 disabled={!isAdmin || busy}
                 onClick={() => void removeSelected()}
               >
                 Supprimer
-              </button>
+              </Button>
             </div>
           </section>
         ) : null}
 
         {overlapRows?.length ? (
-          <section className="overlap-block">
-            <h4>Chevauchements</h4>
-            <ul>
+          <section className="mt-4">
+            <h4 className="font-semibold">Chevauchements</h4>
+            <ul className="pl-4 text-sm">
               {overlapRows.map((o) => (
                 <li key={o.id}>
                   {o.name} (≈ {o.overlapArea.toExponential(2)})
@@ -370,7 +386,7 @@ export function AdminNeighbourhoodsPage(): ReactElement {
         ) : null}
       </aside>
 
-      <div className="admin-map-pane">
+      <div className="min-w-0 flex-1 p-3">
         <AdminNeighbourhoodMap
           bridge={bridgeRef}
           items={items}

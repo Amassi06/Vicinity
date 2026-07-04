@@ -1,11 +1,13 @@
 import { z } from 'zod';
 
+const MAX_COORDINATE = 20000;
+
 export const SignatureZoneInputSchema = z.object({
   page: z.number().int().min(1),
-  x: z.number().min(0),
-  y: z.number().min(0),
-  width: z.number().positive(),
-  height: z.number().positive(),
+  x: z.number().min(0).max(MAX_COORDINATE),
+  y: z.number().min(0).max(MAX_COORDINATE),
+  width: z.number().positive().max(MAX_COORDINATE),
+  height: z.number().positive().max(MAX_COORDINATE),
   required: z.boolean().default(true),
 });
 

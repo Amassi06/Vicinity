@@ -2,6 +2,7 @@
     -fx-font-family: "Segoe UI", "Ubuntu", sans-serif;
     -fx-font-size: 13px;
     -fx-background-color: #f4f6f8;
+    -fx-accent: #1d4ed8;
 }
 
 .label-title {
@@ -39,6 +40,10 @@
     -fx-background-radius: 6;
 }
 
+.button-secondary:hover {
+    -fx-background-color: #cbd5e1;
+}
+
 .toolbar {
     -fx-background-color: white;
     -fx-border-color: #e2e8f0;
@@ -55,6 +60,13 @@
     -fx-padding: 16;
 }
 
+.stats-grid {
+    -fx-background-color: white;
+    -fx-background-radius: 8;
+    -fx-border-color: #e2e8f0;
+    -fx-border-radius: 8;
+}
+
 .text-area-mono {
     -fx-font-family: "Consolas", "DejaVu Sans Mono", monospace;
     -fx-font-size: 12px;
@@ -62,4 +74,8 @@
 
 .table-view {
     -fx-background-color: transparent;
+}
+
+.text-area {
+    -fx-background-color: white;
 }

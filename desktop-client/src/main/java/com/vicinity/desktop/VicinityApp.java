@@ -6,6 +6,7 @@ import com.vicinity.desktop.session.AppSession;
 import com.vicinity.desktop.store.LocalStore;
 import com.vicinity.desktop.ui.LoginView;
 import com.vicinity.desktop.ui.MainView;
+import com.vicinity.desktop.ui.ThemeSupport;
 import javafx.application.Application;
 import javafx.application.Platform;
 import javafx.scene.Scene;
@@ -61,12 +62,23 @@ public final class VicinityApp extends Application {
 
     private void applyScene(final javafx.scene.Parent root) {
         final Scene scene = new Scene(root, 960, 640);
-        final var css = getClass().getResource("/styles.css");
-        if (css != null) {
-            scene.getStylesheets().add(css.toExternalForm());
+        ThemeSupport.apply(scene, LocalStore.loadThemeMode());
+        ThemeSupport.applyAccentColor(scene, LocalStore.loadSetting("accent_color", "#2563eb"));
+        try {
+            ThemeSupport.applyFontScale(
+                    scene, Double.parseDouble(LocalStore.loadSetting("font_scale", "1.0")));
+        } catch (NumberFormatException ignored) {
+            // garde la taille par défaut
         }
         primaryStage.setScene(scene);
         primaryStage.show();
+    }
+
+    @Override
+    public void stop() {
+        if (mainView != null) {
+            mainView.onClosing();
+        }
     }
 
     private void showFatal(final Stage stage, final String message) {

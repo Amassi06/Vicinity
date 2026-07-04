@@ -1,5 +1,6 @@
 import { useEffect, useState, type ReactElement } from 'react';
 import { apiFetch } from '../lib/api.js';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card.js';
 
 type PluginRow = { id: string; name?: string; description: string };
 
@@ -15,24 +16,32 @@ export function PluginsPage(): ReactElement {
   }, []);
 
   return (
-    <section className="panel">
-      <h1 style={{ marginTop: 0 }}>Plugins Vicinity</h1>
-      <h2>Boot (Node)</h2>
-      <ul>
-        {boot.map((p) => (
-          <li key={p.id}>
-            <strong>{p.id}</strong> — {p.description}
-          </li>
-        ))}
-      </ul>
-      <h2>Sondages</h2>
-      <ul>
-        {polls.map((p) => (
-          <li key={p.id}>
-            <strong>{p.name ?? p.id}</strong> — {p.description}
-          </li>
-        ))}
-      </ul>
-    </section>
+    <Card className="m-6">
+      <CardHeader>
+        <CardTitle className="text-xl">Plugins Vicinity</CardTitle>
+      </CardHeader>
+      <CardContent className="space-y-4">
+        <div>
+          <h2 className="mb-2 text-lg font-semibold">Boot (Node)</h2>
+          <ul className="space-y-1">
+            {boot.map((p) => (
+              <li key={p.id}>
+                <strong>{p.id}</strong> — {p.description}
+              </li>
+            ))}
+          </ul>
+        </div>
+        <div>
+          <h2 className="mb-2 text-lg font-semibold">Sondages</h2>
+          <ul className="space-y-1">
+            {polls.map((p) => (
+              <li key={p.id}>
+                <strong>{p.name ?? p.id}</strong> — {p.description}
+              </li>
+            ))}
+          </ul>
+        </div>
+      </CardContent>
+    </Card>
   );
 }

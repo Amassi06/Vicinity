@@ -97,6 +97,29 @@ enum PointTxReason {
   SERVICE_PAYOUT
   ADMIN_ADJUSTMENT
   REFUND
+  ESCROW_DEPOSIT
+  ESCROW_RELEASE
+  ESCROW_REFUND
+}
+
+/// Catégories d'annonces, gérées exclusivement par les administrateurs.
+model ListingCategory {
+  id        String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  slug      String   @unique
+  label     String
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz
+
+  @@map("listing_categories")
+}
+
+/// Catégories d'incidents, gérées exclusivement par les administrateurs.
+model IncidentCategory {
+  id        String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  slug      String   @unique
+  label     String
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz
+
+  @@map("incident_categories")
 }
 
 model PointTransaction {

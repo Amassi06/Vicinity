@@ -1,5 +1,6 @@
 import crypto from 'node:crypto';
 import { prisma } from '../db/prisma.js';
+import { env } from '../config/env.js';
 import { hashPassword, verifyPassword } from './password.js';
 import { signAccessToken, signRefreshToken, verifyRefreshToken } from './jwt.js';
 import type { Role } from './jwt.js';
@@ -9,6 +10,7 @@ export interface SignupInput {
   email: string;
   password: string;
   displayName: string;
+  neighbourhoodId: string;
 }
 
 export interface AuthTokens {
@@ -29,25 +31,47 @@ function refreshTtlMs(): number {
 }
 
 export async function signup(input: SignupInput): Promise<AuthResult> {
+  const neighbourhood = await prisma.neighbourhood.findUnique({
+    where: { id: input.neighbourhoodId },
+    select: { id: true },
+  });
+  if (!neighbourhood) throw new Error('invalid_neighbourhood');
+
   const passwordHash = await hashPassword(input.password);
-  const user = await prisma.user.create({
-    data: {
-      email: input.email,
-      passwordHash,
-      displayName: input.displayName,
-      status: 'ACTIVE',
-    },
+  const bonus = env.WELCOME_BONUS_POINTS;
+  const user = await prisma.$transaction(async (tx) => {
+    const created = await tx.user.create({
+      data: {
+        email: input.email,
+        passwordHash,
+        displayName: input.displayName,
+        status: 'ACTIVE',
+        neighbourhoodId: input.neighbourhoodId,
+        pointsBalance: bonus,
+      },
+    });
+    if (bonus > 0) {
+      await tx.pointTransaction.create({
+        data: { toUserId: created.id, amount: bonus, reason: 'WELCOME_BONUS' },
+      });
+    }
+    return created;
   });
   return issueTokens(user);
 }
 
-export async function login(email: string, password: string): Promise<AuthResult> {
+export async function login(email: string, password: string, mfaToken?: string): Promise<AuthResult> {
   const user = await prisma.user.findUnique({ where: { email } });
   if (!user || user.status === 'SUSPENDED' || user.status === 'DELETED') {
     throw new Error('invalid_credentials');
   }
   const ok = await verifyPassword(user.passwordHash, password);
   if (!ok) throw new Error('invalid_credentials');
+  if (user.mfaEnabled) {
+    if (!mfaToken || !user.mfaSecret || !verifyTotp(mfaToken, user.mfaSecret)) {
+      throw new Error('mfa_required');
+    }
+  }
   return issueTokens(user);
 }
 

@@ -6,6 +6,8 @@ export const ListingCreateSchema = z.object({
   description: z.string().max(4000).default(''),
   kind: z.enum(['offer', 'request']),
   category: z.string().min(1).max(80),
+  location: z.string().max(240).default(''),
+  serviceDate: z.coerce.date().optional(),
   pricePoints: z.number().int().min(0).max(100_000).default(0),
 });
 
@@ -19,3 +21,15 @@ export const ListingListQuerySchema = z.object({
 });
 
 export type ListingListQuery = z.infer<typeof ListingListQuerySchema>;
+
+export const CategoryCreateSchema = z.object({
+  label: z.string().min(1).max(80),
+  slug: z
+    .string()
+    .min(1)
+    .max(80)
+    .regex(/^[a-z0-9-]+$/)
+    .optional(),
+});
+
+export type CategoryCreateInput = z.infer<typeof CategoryCreateSchema>;

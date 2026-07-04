@@ -7,6 +7,8 @@ export interface ListingEntity extends MongoDocument {
   description: string;
   kind: 'offer' | 'request';
   category: string;
+  location: string;
+  serviceDate?: Date | null;
   pricePoints: number;
   isFree: boolean;
   contractId?: string | null;
@@ -23,6 +25,8 @@ const ListingSchema = new Schema<ListingEntity>(
     description: { type: String, default: '' },
     kind: { type: String, enum: ['offer', 'request'], required: true, index: true },
     category: { type: String, required: true, index: true },
+    location: { type: String, default: '' },
+    serviceDate: { type: Date, default: null },
     pricePoints: { type: Number, default: 0, min: 0 },
     isFree: { type: Boolean, default: true },
     contractId: { type: String, default: null },

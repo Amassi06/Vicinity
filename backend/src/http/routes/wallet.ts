@@ -2,6 +2,7 @@ import { Router } from 'express';
 import { z } from 'zod';
 import { requireAuth, requireRole } from '../../auth/middleware.js';
 import { creditPoints, getWallet } from '../../wallet/service.js';
+import { registerModule } from '../../plugins/module-registry.js';
 
 export const walletRouter: Router = Router();
 
@@ -36,3 +37,9 @@ walletRouter.post(
     }
   },
 );
+
+registerModule({
+  id: 'wallet',
+  description: 'Portefeuille de points des habitants.',
+  router: walletRouter,
+});

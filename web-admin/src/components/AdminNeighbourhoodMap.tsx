@@ -224,9 +224,9 @@ export function AdminNeighbourhoodMap(props: Props): ReactElement {
 
   if (!showMap) {
     return (
-      <div className="map-empty admin-map-empty">
+      <div className="flex h-[calc(100vh-90px)] min-h-96 flex-col items-center justify-center rounded-lg border border-dashed border-input bg-card p-8 text-center">
         <p>Carte masquée tant qu’aucune zone n’est définie.</p>
-        <p className="map-empty-hint">
+        <p className="max-w-md text-muted-foreground">
           Cliquez <strong>Nouveau tracé</strong> (compte ADMIN) : la carte se centre sur votre position.
         </p>
       </div>
@@ -237,7 +237,7 @@ export function AdminNeighbourhoodMap(props: Props): ReactElement {
     <BoundedNeighbourhoodMap
       boundaries={boundaries}
       drawBootstrap={drawBootstrap}
-      className="map-wrap admin-map-wrap"
+      className="h-[calc(100vh-90px)] min-h-96 overflow-hidden rounded-lg border border-border"
     >
       <MapBackgroundClick onClear={onClearSelection} />
       <NeighbourhoodOverlays items={items} selectedId={selectedId} onSelect={onSelectContour} />

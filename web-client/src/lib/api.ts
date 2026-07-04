@@ -1,7 +1,10 @@
 export type AuthUser = {
   sub: string;
   email: string;
+  displayName: string;
   role: string;
+  neighbourhoodId: string | null;
+  neighbourhoodName: string | null;
 };
 
 let accessToken = sessionStorage.getItem('vicinity_access') ?? '';
@@ -22,6 +25,38 @@ export function logout(): void {
   accessToken = '';
   sessionStorage.removeItem('vicinity_access');
   sessionStorage.removeItem('vicinity_refresh');
+  // Le quartier actif est propre à l'utilisateur connecté : ne pas le faire
+  // fuiter vers le prochain compte qui se connecte dans le même onglet.
+  sessionStorage.removeItem('vicinity_selected_neighbourhood');
+}
+
+/** Télécharge une ressource binaire authentifiée (pièce jointe) en object URL. */
+export async function apiFetchObjectUrl(path: string): Promise<string> {
+  const res = await fetch(`/api${path}`, {
+    headers: { Authorization: `Bearer ${accessToken}` },
+  });
+  if (!res.ok) throw new Error(`fetch_failed_${res.status}`);
+  const blob = await res.blob();
+  return URL.createObjectURL(blob);
+}
+
+/** Upload multipart authentifié (pièce jointe de message). */
+export async function apiUpload<T>(path: string, form: FormData): Promise<T> {
+  const res = await fetch(`/api${path}`, {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${accessToken}` },
+    body: form,
+  });
+  const text = await res.text();
+  const data: unknown = text ? JSON.parse(text) : undefined;
+  if (!res.ok) {
+    const msg =
+      typeof data === 'object' && data !== null && 'error' in data
+        ? String((data as { error: string }).error)
+        : `${res.status}`;
+    throw new Error(msg);
+  }
+  return data as T;
 }
 
 export async function apiFetch<T>(

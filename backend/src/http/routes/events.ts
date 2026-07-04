@@ -9,11 +9,14 @@ import {
   cancelEvent,
   createEventOrganizer,
   declineEvent,
+  deleteEvent,
   expressInterest,
+  getInterestedView,
   getRecommendations,
   listPublishedEvents,
   publishEvent,
 } from '../../events/service.js';
+import { registerModule } from '../../plugins/module-registry.js';
 
 export const eventsRouter = Router();
 
@@ -61,9 +64,38 @@ eventsRouter.post('/events', requireAuth, async (req, res) => {
     const doc = await createEventOrganizer(req.auth!.sub, parsed.data);
     res.status(201).json(doc);
   } catch (err) {
-    res.status(500).json({
-      error: err instanceof Error ? err.message : 'create_failed',
-    });
+    const message = err instanceof Error ? err.message : 'create_failed';
+    const status = message === 'event_in_past' || message === 'invalid_dates' ? 400 : 500;
+    res.status(status).json({ error: message });
+  }
+});
+
+eventsRouter.get('/events/:id/interested', requireAuth, async (req, res) => {
+  const id = parseId(req);
+  if (!id) {
+    res.status(400).json({ error: 'invalid_id' });
+    return;
+  }
+  const view = await getInterestedView(id, req.auth!.sub, req.auth!.role === 'ADMIN');
+  if (!view) {
+    res.status(404).json({ error: 'not_found' });
+    return;
+  }
+  res.json(view);
+});
+
+eventsRouter.delete('/events/:id', requireAuth, async (req, res) => {
+  const id = parseId(req);
+  if (!id) {
+    res.status(400).json({ error: 'invalid_id' });
+    return;
+  }
+  try {
+    const ok = await deleteEvent(id, req.auth!.sub, req.auth!.role === 'ADMIN');
+    res.status(ok ? 204 : 404).send();
+  } catch (err) {
+    const message = err instanceof Error ? err.message : 'delete_failed';
+    res.status(message === 'forbidden' ? 403 : 400).json({ error: message });
   }
 });
 
@@ -141,4 +173,10 @@ eventsRouter.post('/events/:id/decline', requireAuth, async (req, res) => {
     const msg = err instanceof Error ? err.message : 'decline_failed';
     res.status(400).json({ error: msg });
   }
+});
+
+registerModule({
+  id: 'events',
+  description: 'Événements, intérêt (swipe) et recommandations Neo4j.',
+  router: eventsRouter,
 });

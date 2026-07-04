@@ -4,5 +4,5 @@ export function styleForNeighbourhoodId(id: string): { color: string; fillOpacit
     h = (h * 31 + id.charCodeAt(i)) >>> 0;
   }
   const hue = h % 360;
-  return { color: `hsl(${hue} 70% 45%)`, fillOpacity: 0.22 };
+  return { color: `hsl(${hue} 70% 45%)`, fillOpacity: 0.28 };
 }
