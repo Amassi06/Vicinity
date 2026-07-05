@@ -280,5 +280,7 @@
   "documents.sign.title": "Sign the zone",
   "documents.inbox.empty": "No document awaiting your signature.",
   "documents.zoneEditor.noNeighbours": "No other resident to send the document to.",
-  "messages.emptyRecording": "Empty recording — check your microphone."
+  "messages.emptyRecording": "Empty recording — check your microphone.",
+  "home.overview": "Overview",
+  "home.neighboursOnline": "Neighbours online"
 }

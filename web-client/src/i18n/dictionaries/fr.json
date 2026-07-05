@@ -280,5 +280,7 @@
   "documents.sign.title": "Signer la zone",
   "documents.inbox.empty": "Aucun document en attente de votre signature.",
   "documents.zoneEditor.noNeighbours": "Aucun autre habitant à qui envoyer le document.",
-  "messages.emptyRecording": "Enregistrement vide — vérifiez votre micro."
+  "messages.emptyRecording": "Enregistrement vide — vérifiez votre micro.",
+  "home.overview": "Aperçu",
+  "home.neighboursOnline": "Voisins en ligne"
 }
