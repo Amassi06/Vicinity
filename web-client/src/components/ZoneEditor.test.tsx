@@ -42,6 +42,10 @@ function renderEditor(onSaved = vi.fn()): { onSaved: typeof onSaved } {
 
 beforeEach(() => {
   mockedApiFetch.mockReset();
+  // Par défaut, la liste des habitants (chargée au montage) renvoie une liste vide.
+  mockedApiFetch.mockImplementation((path: string) =>
+    path === '/me/neighbours' ? Promise.resolve({ items: [] }) : Promise.resolve(undefined),
+  );
   destroyMock.mockClear();
   vi.stubGlobal(
     'fetch',

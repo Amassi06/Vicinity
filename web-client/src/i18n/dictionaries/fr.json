@@ -118,7 +118,7 @@
   "documents.zoneEditor.manualWidth": "Largeur",
   "documents.zoneEditor.manualHeight": "Hauteur",
   "documents.zoneEditor.manualAdd": "Ajouter la zone",
-  "documents.zoneEditor.participants": "Signataires (identifiants séparés par des virgules)",
+  "documents.zoneEditor.participants": "Signataires (habitants du quartier)",
   "documents.sign.label": "Signer doc",
   "documents.sign.zone": "zone",
   "documents.sign.token": "TOTP 6 chiffres",
@@ -278,5 +278,7 @@
   "documents.sign.drawHint": "Dessinez votre signature ci-dessus.",
   "documents.sign.mfaHint": "Code TOTP (MFA activé)",
   "documents.sign.title": "Signer la zone",
-  "documents.inbox.empty": "Aucun document en attente de votre signature."
+  "documents.inbox.empty": "Aucun document en attente de votre signature.",
+  "documents.zoneEditor.noNeighbours": "Aucun autre habitant à qui envoyer le document.",
+  "messages.emptyRecording": "Enregistrement vide — vérifiez votre micro."
 }

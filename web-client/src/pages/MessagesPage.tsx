@@ -175,17 +175,29 @@ export function MessagesPage(): ReactElement {
     }
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-      const rec = new MediaRecorder(stream);
+      // Choisit un type réellement supporté par le navigateur (Chrome/Firefox).
+      const preferred = ['audio/webm;codecs=opus', 'audio/webm', 'audio/ogg;codecs=opus', 'audio/mp4'];
+      const mimeType = preferred.find((m) => MediaRecorder.isTypeSupported(m));
+      const rec = new MediaRecorder(stream, mimeType ? { mimeType } : undefined);
       const chunks: BlobPart[] = [];
-      rec.ondataavailable = (e) => chunks.push(e.data);
+      rec.ondataavailable = (e) => {
+        if (e.data && e.data.size > 0) chunks.push(e.data);
+      };
       rec.onstop = () => {
         stream.getTracks().forEach((tr) => tr.stop());
         setRecording(false);
-        const blob = new Blob(chunks, { type: rec.mimeType || 'audio/webm' });
-        void uploadAndSend(blob, 'audio', 'voice.webm');
+        const type = rec.mimeType || mimeType || 'audio/webm';
+        const blob = new Blob(chunks, { type });
+        if (blob.size === 0) {
+          setErr(t('messages.emptyRecording'));
+          return;
+        }
+        const ext = type.includes('mp4') ? 'm4a' : type.includes('ogg') ? 'ogg' : 'webm';
+        void uploadAndSend(blob, 'audio', `voice.${ext}`);
       };
       recorderRef.current = rec;
-      rec.start();
+      // timeslice : force un flush régulier des données audio.
+      rec.start(250);
       setRecording(true);
     } catch {
       setErr(t('messages.micDenied'));

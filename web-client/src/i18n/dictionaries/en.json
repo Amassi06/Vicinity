@@ -118,7 +118,7 @@
   "documents.zoneEditor.manualWidth": "Width",
   "documents.zoneEditor.manualHeight": "Height",
   "documents.zoneEditor.manualAdd": "Add zone",
-  "documents.zoneEditor.participants": "Signers (comma-separated user IDs)",
+  "documents.zoneEditor.participants": "Signers (neighbourhood residents)",
   "documents.sign.label": "Sign doc",
   "documents.sign.zone": "zone",
   "documents.sign.token": "6-digit TOTP",
@@ -278,5 +278,7 @@
   "documents.sign.drawHint": "Draw your signature above.",
   "documents.sign.mfaHint": "TOTP code (MFA enabled)",
   "documents.sign.title": "Sign the zone",
-  "documents.inbox.empty": "No document awaiting your signature."
+  "documents.inbox.empty": "No document awaiting your signature.",
+  "documents.zoneEditor.noNeighbours": "No other resident to send the document to.",
+  "messages.emptyRecording": "Empty recording — check your microphone."
 }

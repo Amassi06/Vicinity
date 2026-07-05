@@ -39,7 +39,7 @@ export function ChatAttachment({
     return <img src={url} alt="" className="mt-1 max-h-[200px] max-w-[200px] rounded-md" />;
   }
   if (attachment.kind === 'audio') {
-    return <audio controls src={url} className="mt-1 h-9 max-w-full" />;
+    return <audio controls preload="metadata" src={url} className="mt-1 h-9 max-w-full" />;
   }
   return (
     <a href={url} download className="mt-1 block text-xs underline">

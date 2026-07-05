@@ -45,7 +45,15 @@ export function ZoneEditor({
   const [manualY, setManualY] = useState('');
   const [manualWidth, setManualWidth] = useState('');
   const [manualHeight, setManualHeight] = useState('');
-  const [participants, setParticipants] = useState('');
+  // Signataires choisis parmi les habitants du quartier (par leur nom).
+  const [neighbours, setNeighbours] = useState<Array<{ id: string; displayName: string }>>([]);
+  const [selectedSigners, setSelectedSigners] = useState<Set<string>>(new Set());
+
+  useEffect(() => {
+    void apiFetch<{ items: Array<{ id: string; displayName: string }> }>('/me/neighbours')
+      .then((r) => setNeighbours(r.items))
+      .catch(() => setNeighbours([]));
+  }, []);
 
   useEffect(() => {
     const controller = new AbortController();
@@ -162,10 +170,7 @@ export function ZoneEditor({
     setErr(null);
     setSaving(true);
     try {
-      const participantIds = participants
-        .split(',')
-        .map((id) => id.trim())
-        .filter(Boolean);
+      const participantIds = [...selectedSigners];
       await apiFetch(`/documents/${documentId}/zones`, {
         method: 'POST',
         json: participantIds.length ? { zones, participants: participantIds } : { zones },
@@ -195,13 +200,41 @@ export function ZoneEditor({
           />
           {t('documents.zoneEditor.required')}
         </label>
-        <div className="space-y-1">
-          <Label htmlFor="zone-participants">{t('documents.zoneEditor.participants')}</Label>
-          <Input
-            id="zone-participants"
-            value={participants}
-            onChange={(e) => setParticipants(e.target.value)}
-          />
+        <div className="space-y-1.5">
+          <Label>{t('documents.zoneEditor.participants')}</Label>
+          {neighbours.length === 0 ? (
+            <p className="text-xs text-muted-foreground">{t('documents.zoneEditor.noNeighbours')}</p>
+          ) : (
+            <div className="flex flex-wrap gap-2">
+              {neighbours.map((n) => {
+                const checked = selectedSigners.has(n.id);
+                return (
+                  <label
+                    key={n.id}
+                    className={
+                      'flex cursor-pointer items-center gap-1.5 rounded-md border px-2.5 py-1 text-sm ' +
+                      (checked ? 'border-primary bg-primary/5' : 'border-input')
+                    }
+                  >
+                    <input
+                      type="checkbox"
+                      className="size-3.5"
+                      checked={checked}
+                      onChange={(e) =>
+                        setSelectedSigners((prev) => {
+                          const next = new Set(prev);
+                          if (e.target.checked) next.add(n.id);
+                          else next.delete(n.id);
+                          return next;
+                        })
+                      }
+                    />
+                    {n.displayName}
+                  </label>
+                );
+              })}
+            </div>
+          )}
         </div>
         {loadingPdf ? (
           <div
