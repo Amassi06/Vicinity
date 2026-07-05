@@ -77,6 +77,25 @@ export async function listDocumentsForUser(userId: string, limit = 50): Promise<
     .exec();
 }
 
+/**
+ * Inbox : documents reçus à signer (l'utilisateur est participant, pas le
+ * propriétaire, le document est en attente et il lui reste une zone requise
+ * non signée). Alimente la section "reçus" et la cloche de notifications.
+ */
+export async function listInboxDocuments(userId: string, limit = 50): Promise<DocumentEntity[]> {
+  const docs = await DocumentModel.find({
+    status: 'pending_signatures',
+    participants: userId,
+    ownerId: { $ne: userId },
+  })
+    .sort({ updatedAt: -1 })
+    .limit(limit)
+    .exec();
+  return docs.filter((d) =>
+    d.zones.some((z) => z.required && z.signedBy !== userId && !z.signedBy),
+  );
+}
+
 export async function getDocument(
   id: string,
   userId: string,
@@ -122,12 +141,30 @@ export async function setZones(
   return updated;
 }
 
+export interface SignZoneInput {
+  /** Dessin manuscrit de la signature, en data URL PNG (canvas). */
+  signatureImage: string;
+  /** Code TOTP — requis seulement si l'utilisateur a activé le MFA. */
+  mfaToken?: string;
+}
+
+/** Décode une data URL PNG en buffer, en validant le format. */
+function decodeSignatureImage(dataUrl: string): Buffer {
+  const match = /^data:image\/png;base64,([A-Za-z0-9+/=]+)$/.exec(dataUrl.trim());
+  if (!match) throw new Error('invalid_signature_image');
+  const buffer = Buffer.from(match[1]!, 'base64');
+  if (buffer.length === 0 || buffer.length > 500_000) throw new Error('invalid_signature_image');
+  return buffer;
+}
+
 /**
- * Signe une zone :
+ * Signe une zone avec une signature MANUSCRITE (dessin canvas) :
  *  - L'utilisateur doit être participant.
- *  - MFA OBLIGATOIRE : on vérifie le TOTP avant d'inscrire la signature.
- *  - signatureHash = sha256(documentSha256 || userId || zoneIndex || ISO timestamp)
- *    → trace cryptographique du couple (document, signataire, zone, instant).
+ *  - Le dessin de la signature est obligatoire ; il est stocké et son empreinte
+ *    entre dans le hash de signature.
+ *  - MFA : conservé comme second facteur si l'utilisateur l'a activé (exigence
+ *    RGPD "MFA pour la signature"). Sans MFA activé, le dessin suffit.
+ *  - signatureHash = sha256(documentSha256 || userId || zoneIndex || ISO || sha256(image))
  *  - Si toutes les zones requises sont signées, le doc passe en "signed".
  *  - Audit log RGPD : SIGN_DOCUMENT.
  */
@@ -135,7 +172,7 @@ export async function signZone(
   id: string,
   zoneIndex: number,
   userId: string,
-  token: string,
+  input: SignZoneInput,
 ): Promise<DocumentEntity> {
   const doc = await DocumentModel.findById(id);
   if (!doc) throw new Error('not_found');
@@ -145,18 +182,31 @@ export async function signZone(
   if (!zone) throw new Error('invalid_zone');
   if (zone.signedBy) throw new Error('already_signed');
 
-  assertMfaNotRateLimited(userId);
-  const mfaOk = await verifyMfaForUser(userId, token);
-  if (!mfaOk) {
-    registerFailedMfaAttempt(userId);
-    throw new Error('mfa_required');
+  const imageBuffer = decodeSignatureImage(input.signatureImage);
+
+  // MFA en second facteur, uniquement pour les comptes qui l'ont activé.
+  const user = await prisma.user.findUnique({
+    where: { id: userId },
+    select: { mfaEnabled: true },
+  });
+  if (user?.mfaEnabled) {
+    assertMfaNotRateLimited(userId);
+    const mfaOk = await verifyMfaForUser(userId, input.mfaToken ?? '');
+    if (!mfaOk) {
+      registerFailedMfaAttempt(userId);
+      throw new Error('mfa_required');
+    }
+    clearFailedMfaAttempts(userId);
   }
-  clearFailedMfaAttempts(userId);
+
+  const stored = await saveBuffer(imageBuffer);
+  const signatureImageKey = stored.storageKey;
+  const imageHash = crypto.createHash('sha256').update(imageBuffer).digest('hex');
 
   const signedAt = new Date();
   const signatureHash = crypto
     .createHash('sha256')
-    .update(`${doc.sha256}|${userId}|${zoneIndex}|${signedAt.toISOString()}`)
+    .update(`${doc.sha256}|${userId}|${zoneIndex}|${signedAt.toISOString()}|${imageHash}`)
     .digest('hex');
 
   const updated = await DocumentModel.findOneAndUpdate(
@@ -175,7 +225,7 @@ export async function signZone(
                 {
                   $mergeObjects: [
                     { $arrayElemAt: ['$zones', zoneIndex] },
-                    { signedBy: userId, signedAt, signatureHash },
+                    { signedBy: userId, signedAt, signatureHash, signatureImageKey },
                   ],
                 },
               ],
@@ -210,4 +260,23 @@ export async function signZone(
   });
 
   return updated;
+}
+
+/**
+ * Renvoie la clé de stockage du dessin de signature d'une zone, après contrôle
+ * d'accès (propriétaire ou participant). Utilisé pour afficher la signature.
+ */
+export async function getSignatureImageKey(
+  id: string,
+  zoneIndex: number,
+  userId: string,
+): Promise<string | null> {
+  const doc = await DocumentModel.findById(id).lean();
+  if (!doc) throw new Error('not_found');
+  if (doc.ownerId !== userId && !doc.participants.includes(userId)) {
+    throw new Error('forbidden');
+  }
+  const zone = doc.zones[zoneIndex];
+  if (!zone) throw new Error('invalid_zone');
+  return zone.signatureImageKey ?? null;
 }

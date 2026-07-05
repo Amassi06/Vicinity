@@ -261,5 +261,22 @@
   "messages.directMessage": "Message privé",
   "messages.selectConversation": "Sélectionnez une conversation.",
   "messages.voice": "Message vocal",
-  "messages.micDenied": "Micro indisponible ou refusé."
+  "messages.micDenied": "Micro indisponible ou refusé.",
+  "documents.received": "Reçus à signer",
+  "documents.mine": "Mes documents",
+  "documents.open": "Ouvrir",
+  "documents.close": "Fermer",
+  "documents.status.draft": "Brouillon",
+  "documents.status.pending_signatures": "En attente",
+  "documents.status.signed": "Signé",
+  "documents.status.archived": "Archivé",
+  "documents.viewer.title": "Aperçu du document",
+  "documents.viewer.loading": "Chargement du PDF…",
+  "documents.viewer.error": "Impossible d'afficher le PDF.",
+  "documents.sign.canvasLabel": "Zone de dessin de la signature",
+  "documents.sign.clear": "Effacer",
+  "documents.sign.drawHint": "Dessinez votre signature ci-dessus.",
+  "documents.sign.mfaHint": "Code TOTP (MFA activé)",
+  "documents.sign.title": "Signer la zone",
+  "documents.inbox.empty": "Aucun document en attente de votre signature."
 }

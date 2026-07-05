@@ -77,3 +77,4 @@ backend/storage/
 infra/docker/.env.dev
 infra/docker/.env.test
 infra/docker/.env.prod
+desktop-client/bin/

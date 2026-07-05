@@ -9,7 +9,9 @@ import {
 } from '../../documents/schemas.js';
 import {
   getDocument,
+  getSignatureImageKey,
   listDocumentsForUser,
+  listInboxDocuments,
   setZones,
   signZone,
   uploadDocument,
@@ -45,6 +47,11 @@ const UploadBodySchema = z.object({
 
 documentsRouter.get('/documents', requireAuth, async (req, res) => {
   const items = await listDocumentsForUser(req.auth!.sub);
+  res.json({ items });
+});
+
+documentsRouter.get('/documents/inbox', requireAuth, async (req, res) => {
+  const items = await listInboxDocuments(req.auth!.sub);
   res.json({ items });
 });
 
@@ -158,12 +165,10 @@ documentsRouter.post(
       return;
     }
     try {
-      const doc = await signZone(
-        params.data.id,
-        params.data.index,
-        req.auth!.sub,
-        body.data.token,
-      );
+      const doc = await signZone(params.data.id, params.data.index, req.auth!.sub, {
+        signatureImage: body.data.signatureImage,
+        ...(body.data.mfaToken ? { mfaToken: body.data.mfaToken } : {}),
+      });
       res.json(doc);
     } catch (err) {
       const message = err instanceof Error ? err.message : 'unknown_error';
@@ -175,11 +180,38 @@ documentsRouter.post(
         already_signed: 409,
         mfa_required: 401,
         rate_limited: 429,
+        invalid_signature_image: 400,
       };
       res.status(statusByCode[message] ?? 400).json({ error: message });
     }
   },
 );
+
+documentsRouter.get('/documents/:id/zones/:index/signature', requireAuth, async (req, res) => {
+  const params = ZoneParam.safeParse(req.params);
+  if (!params.success) {
+    res.status(400).json({ error: 'invalid_params' });
+    return;
+  }
+  try {
+    const key = await getSignatureImageKey(params.data.id, params.data.index, req.auth!.sub);
+    if (!key) {
+      res.status(404).json({ error: 'not_signed' });
+      return;
+    }
+    const buffer = await readStoredFile(key);
+    res.setHeader('Content-Type', 'image/png');
+    res.send(buffer);
+  } catch (err) {
+    const message = err instanceof Error ? err.message : 'unknown_error';
+    const statusByCode: Record<string, number> = {
+      not_found: 404,
+      forbidden: 403,
+      invalid_zone: 404,
+    };
+    res.status(statusByCode[message] ?? 400).json({ error: message });
+  }
+});
 
 registerModule({
   id: 'documents',

@@ -10,6 +10,8 @@ export interface SignatureZone {
   signedBy?: string | null;
   signedAt?: Date | null;
   signatureHash?: string | null;
+  /** Clé de stockage du dessin manuscrit de la signature (PNG). */
+  signatureImageKey?: string | null;
 }
 
 export interface DocumentEntity extends MongoDocument {
@@ -37,6 +39,7 @@ const SignatureZoneSchema = new Schema<SignatureZone>(
     signedBy: { type: String, default: null },
     signedAt: { type: Date, default: null },
     signatureHash: { type: String, default: null },
+    signatureImageKey: { type: String, default: null },
   },
   { _id: false },
 );

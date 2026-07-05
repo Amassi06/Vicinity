@@ -261,5 +261,22 @@
   "messages.directMessage": "Direct message",
   "messages.selectConversation": "Select a conversation.",
   "messages.voice": "Voice message",
-  "messages.micDenied": "Microphone unavailable or denied."
+  "messages.micDenied": "Microphone unavailable or denied.",
+  "documents.received": "To sign",
+  "documents.mine": "My documents",
+  "documents.open": "Open",
+  "documents.close": "Close",
+  "documents.status.draft": "Draft",
+  "documents.status.pending_signatures": "Pending",
+  "documents.status.signed": "Signed",
+  "documents.status.archived": "Archived",
+  "documents.viewer.title": "Document preview",
+  "documents.viewer.loading": "Loading PDF…",
+  "documents.viewer.error": "Could not display the PDF.",
+  "documents.sign.canvasLabel": "Signature drawing area",
+  "documents.sign.clear": "Clear",
+  "documents.sign.drawHint": "Draw your signature above.",
+  "documents.sign.mfaHint": "TOTP code (MFA enabled)",
+  "documents.sign.title": "Sign the zone",
+  "documents.inbox.empty": "No document awaiting your signature."
 }

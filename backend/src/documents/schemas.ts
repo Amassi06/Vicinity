@@ -17,9 +17,12 @@ export const SetZonesSchema = z.object({
 });
 
 export const SignZoneSchema = z.object({
-  token: z.string().regex(/^\d{6}$/, 'totp must be 6 digits'),
+  // Dessin manuscrit (data URL PNG produit par le canvas).
+  signatureImage: z.string().startsWith('data:image/png;base64,').max(700_000),
+  // TOTP optionnel : exigé côté service seulement si le compte a activé le MFA.
+  mfaToken: z.string().regex(/^\d{6}$/).optional(),
 });
 
 export type SetZonesInput = z.infer<typeof SetZonesSchema>;
-export type SignZoneInput = z.infer<typeof SignZoneSchema>;
+export type SignZoneBody = z.infer<typeof SignZoneSchema>;
 export type SignatureZoneInput = z.infer<typeof SignatureZoneInputSchema>;

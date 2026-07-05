@@ -34,9 +34,13 @@ interface AuthBody {
 interface DocResp {
   _id: string;
   status: string;
-  zones: Array<{ signedBy: string | null; signatureHash: string | null }>;
+  zones: Array<{ signedBy: string | null; signatureHash: string | null; signatureImageKey: string | null }>;
   sha256: string;
 }
+
+// Petit PNG 1×1 valide, en data URL — simule un dessin de signature.
+const SIGNATURE_PNG =
+  'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==';
 
 async function signup(app: ReturnType<typeof createApp>, email: string): Promise<AuthBody> {
   const res = await request(app)
@@ -80,9 +84,10 @@ describe('Documents — upload, zones, signature MFA', () => {
     signerToken = signer.accessToken;
     signerMfaSecret = await enrollAndActivateMfa(app, signerToken);
     // Re-login signer pour obtenir un access token avec mfa=true dans le payload.
+    // Le MFA étant désormais actif, le login exige un code TOTP valide.
     const relogin = await request(app)
       .post('/auth/login')
-      .send({ email: SIGNER, password: PASSWORD });
+      .send({ email: SIGNER, password: PASSWORD, mfaToken: authenticator.generate(signerMfaSecret) });
     signerToken = (relogin.body as AuthBody).accessToken;
   }, TIMEOUT_MS);
 
@@ -175,34 +180,52 @@ describe('Documents — upload, zones, signature MFA', () => {
     expect(body.participants).toEqual(expect.arrayContaining([ownerId, signerId]));
   });
 
-  it('refuses signature without MFA (user without active mfa)', async () => {
-    const res = await request(app)
-      .post(`/documents/${documentId}/zones/0/sign`)
-      .set('Authorization', `Bearer ${ownerToken}`)
-      .send({ token: '000000' });
-    expect(res.status).toBe(401);
-    expect((res.body as { error: string }).error).toBe('mfa_required');
-  });
-
-  it('refuses signature with wrong TOTP', async () => {
-    const res = await request(app)
-      .post(`/documents/${documentId}/zones/0/sign`)
-      .set('Authorization', `Bearer ${signerToken}`)
-      .send({ token: '000000' });
-    expect(res.status).toBe(401);
-  });
-
-  it('signs zone 0 with valid TOTP and produces a signature hash', async () => {
+  it('refuses signature without a handwritten drawing', async () => {
     const totp = authenticator.generate(signerMfaSecret);
     const res = await request(app)
       .post(`/documents/${documentId}/zones/0/sign`)
       .set('Authorization', `Bearer ${signerToken}`)
-      .send({ token: totp });
+      .send({ mfaToken: totp });
+    expect(res.status).toBe(400);
+  });
+
+  it('refuses signature with wrong TOTP for an MFA-enabled signer', async () => {
+    const res = await request(app)
+      .post(`/documents/${documentId}/zones/0/sign`)
+      .set('Authorization', `Bearer ${signerToken}`)
+      .send({ signatureImage: SIGNATURE_PNG, mfaToken: '000000' });
+    expect(res.status).toBe(401);
+    expect((res.body as { error: string }).error).toBe('mfa_required');
+  });
+
+  it('inbox lists the document to sign for the signer', async () => {
+    const res = await request(app)
+      .get('/documents/inbox')
+      .set('Authorization', `Bearer ${signerToken}`);
+    expect(res.status).toBe(200);
+    const ids = (res.body as { items: Array<{ _id: string }> }).items.map((d) => d._id);
+    expect(ids).toContain(documentId);
+  });
+
+  it('signs zone 0 with a drawing + valid TOTP and stores the signature image', async () => {
+    const totp = authenticator.generate(signerMfaSecret);
+    const res = await request(app)
+      .post(`/documents/${documentId}/zones/0/sign`)
+      .set('Authorization', `Bearer ${signerToken}`)
+      .send({ signatureImage: SIGNATURE_PNG, mfaToken: totp });
     expect(res.status).toBe(200);
     const body = res.body as DocResp;
     expect(body.zones[0]?.signedBy).toBe(signerId);
     expect(body.zones[0]?.signatureHash).toMatch(/^[0-9a-f]{64}$/);
+    expect(body.zones[0]?.signatureImageKey).toEqual(expect.any(String));
     expect(body.status).toBe('pending_signatures');
+
+    // La signature dessinée est récupérable en PNG.
+    const img = await request(app)
+      .get(`/documents/${documentId}/zones/0/signature`)
+      .set('Authorization', `Bearer ${signerToken}`);
+    expect(img.status).toBe(200);
+    expect(img.headers['content-type']).toContain('image/png');
   });
 
   it('refuses to re-sign an already signed zone', async () => {
@@ -210,7 +233,7 @@ describe('Documents — upload, zones, signature MFA', () => {
     const res = await request(app)
       .post(`/documents/${documentId}/zones/0/sign`)
       .set('Authorization', `Bearer ${signerToken}`)
-      .send({ token: totp });
+      .send({ signatureImage: SIGNATURE_PNG, mfaToken: totp });
     expect(res.status).toBe(409);
     expect((res.body as { error: string }).error).toBe('already_signed');
   });
@@ -220,7 +243,7 @@ describe('Documents — upload, zones, signature MFA', () => {
     const res = await request(app)
       .post(`/documents/${documentId}/zones/1/sign`)
       .set('Authorization', `Bearer ${signerToken}`)
-      .send({ token: totp });
+      .send({ signatureImage: SIGNATURE_PNG, mfaToken: totp });
     expect(res.status).toBe(200);
     expect((res.body as DocResp).status).toBe('signed');
 
@@ -305,11 +328,11 @@ describe('Documents — upload, zones, signature MFA', () => {
       request(app)
         .post(`/documents/${raceDocId}/zones/0/sign`)
         .set('Authorization', `Bearer ${signerToken}`)
-        .send({ token: totp }),
+        .send({ signatureImage: SIGNATURE_PNG, mfaToken: totp }),
       request(app)
         .post(`/documents/${raceDocId}/zones/0/sign`)
         .set('Authorization', `Bearer ${signerToken}`)
-        .send({ token: totp }),
+        .send({ signatureImage: SIGNATURE_PNG, mfaToken: totp }),
     ]);
     const statuses = [first.status, second.status].sort();
     expect(statuses).toEqual([200, 409]);
@@ -322,7 +345,11 @@ describe('Documents — upload, zones, signature MFA', () => {
     const rateLimitedSecret = await enrollAndActivateMfa(app, rateLimited.accessToken);
     const relogin = await request(app)
       .post('/auth/login')
-      .send({ email: `__doc_ratelimit_${STAMP}@example.com`, password: PASSWORD });
+      .send({
+        email: `__doc_ratelimit_${STAMP}@example.com`,
+        password: PASSWORD,
+        mfaToken: authenticator.generate(rateLimitedSecret),
+      });
     const rateLimitedToken = (relogin.body as AuthBody).accessToken;
 
     const upload = await request(app)
@@ -340,7 +367,7 @@ describe('Documents — upload, zones, signature MFA', () => {
       const res = await request(app)
         .post(`/documents/${rlDocId}/zones/0/sign`)
         .set('Authorization', `Bearer ${rateLimitedToken}`)
-        .send({ token: '000000' });
+        .send({ signatureImage: SIGNATURE_PNG, mfaToken: '000000' });
       expect(res.status).toBe(401);
     }
 
@@ -348,7 +375,7 @@ describe('Documents — upload, zones, signature MFA', () => {
     const lockedOut = await request(app)
       .post(`/documents/${rlDocId}/zones/0/sign`)
       .set('Authorization', `Bearer ${rateLimitedToken}`)
-      .send({ token: validTotp });
+      .send({ signatureImage: SIGNATURE_PNG, mfaToken: validTotp });
     expect(lockedOut.status).toBe(429);
     expect((lockedOut.body as { error: string }).error).toBe('rate_limited');
 
