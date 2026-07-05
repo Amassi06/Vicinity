@@ -154,7 +154,6 @@ export function MessagesPage(): ReactElement {
   const t = useT();
   const [params, setParams] = useSearchParams();
 
-  const [active, setActive] = useState<Conversation | null>(null);
   const [messages, setMessages] = useState<Message[]>([]);
   const [draft, setDraft] = useState('');
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
@@ -182,62 +181,78 @@ export function MessagesPage(): ReactElement {
     return names;
   }, [neighbours, user]);
 
-  // Sélection initiale : DM ciblé par la query (?dm=), sinon salon public.
-  useEffect(() => {
+  // L'URL est l'unique source de vérité : `?dm=<peerId>` ouvre un message
+  // privé, sinon le salon public. Sélectionner une conversation = naviguer.
+  const active: Conversation | null = useMemo(() => {
     const dmPeerId = params.get('dm');
-    const dmPeerName = params.get('name');
     if (dmPeerId && user) {
-      setActive({
+      return {
         kind: 'dm',
         id: dmConversationId(user.sub, dmPeerId),
-        label: dmPeerName ?? t('messages.directMessage'),
+        label: displayNames.get(dmPeerId) ?? params.get('name') ?? t('messages.directMessage'),
         peerId: dmPeerId,
-      });
-      setParams({}, { replace: true });
-    } else if (!active && publicConversation) {
-      setActive(publicConversation);
+      };
     }
-  }, [params, user, publicConversation, active, setParams, t]);
+    return publicConversation;
+  }, [params, user, publicConversation, displayNames, t]);
+  const activeId = active?.id ?? null;
+
+  function selectConversation(conversation: Conversation): void {
+    if (conversation.kind === 'dm') {
+      setParams({ dm: conversation.peerId, name: conversation.label });
+    } else {
+      setParams({});
+    }
+  }
+
+  // Garde anti-course : seule la conversation encore active a le droit
+  // d'écrire dans l'état (une réponse lente d'une conversation quittée est ignorée).
+  const activeIdRef = useRef<string | null>(null);
+  activeIdRef.current = activeId;
 
   const loadMessages = useCallback(
-    async (conversation: Conversation) => {
+    async (conversationId: string) => {
       try {
         const response = await apiFetch<{ items: Message[] }>(
-          `/conversations/${conversation.id}/messages`,
+          `/conversations/${conversationId}/messages`,
         );
+        if (activeIdRef.current !== conversationId) return;
         setMessages(response.items);
-        await apiFetch(`/conversations/${conversation.id}/read`, { method: 'POST' });
+        await apiFetch(`/conversations/${conversationId}/read`, { method: 'POST' });
         void refreshNotifications();
       } catch (error) {
-        setErrorMessage(apiErrorMessage(error, t));
+        if (activeIdRef.current === conversationId) {
+          setErrorMessage(apiErrorMessage(error, t));
+        }
       }
     },
     [t, refreshNotifications],
   );
 
-  // Rejoint la room active et charge son historique.
+  // Rejoint la room active et charge son historique ; repart d'un fil propre.
   useEffect(() => {
-    if (!active) return;
-    joinConversation(active.id);
-    void loadMessages(active);
-    const activeId = active.id;
+    if (!activeId) return;
+    setMessages([]);
+    setErrorMessage(null);
+    joinConversation(activeId);
+    void loadMessages(activeId);
     return () => leaveConversation(activeId);
-  }, [active, joinConversation, leaveConversation, loadMessages]);
+  }, [activeId, joinConversation, leaveConversation, loadMessages]);
 
   // Messages temps réel de la conversation active.
   useEffect(() => {
     return onMessage((payload) => {
-      if (!active || payload['conversationId'] !== active.id) return;
+      if (!activeId || payload['conversationId'] !== activeId) return;
       setMessages((previous) => {
         const incoming = payload as unknown as Message;
         if (previous.some((message) => message._id === incoming._id)) return previous;
         return [...previous, incoming];
       });
       if (payload['senderId'] !== user?.sub) {
-        void apiFetch(`/conversations/${active.id}/read`, { method: 'POST' });
+        void apiFetch(`/conversations/${activeId}/read`, { method: 'POST' });
       }
     });
-  }, [onMessage, active, user]);
+  }, [onMessage, activeId, user]);
 
   useEffect(() => {
     scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight });
@@ -307,9 +322,9 @@ export function MessagesPage(): ReactElement {
       <div className="max-h-44 shrink-0 md:max-h-none md:min-h-0">
         <ConversationList
           conversations={conversations}
-          activeId={active?.id ?? null}
+          activeId={activeId}
           online={online}
-          onSelect={setActive}
+          onSelect={selectConversation}
         />
       </div>
 
