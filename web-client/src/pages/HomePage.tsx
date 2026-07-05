@@ -14,12 +14,19 @@ export function HomePage(): ReactElement {
   const { online } = useRealtime();
   const t = useT();
   const [balance, setBalance] = useState<number | null>(null);
+  const [neighbourIds, setNeighbourIds] = useState<string[]>([]);
 
   useEffect(() => {
     void apiFetch<{ balance: number }>('/me/wallet')
       .then((w) => setBalance(w.balance))
       .catch(() => setBalance(null));
+    void apiFetch<{ items: Array<{ id: string }> }>('/me/neighbours')
+      .then((r) => setNeighbourIds(r.items.map((n) => n.id)))
+      .catch(() => setNeighbourIds([]));
   }, []);
+
+  // Voisins réellement en ligne = habitants du quartier présents dans le registre temps réel.
+  const neighboursOnline = neighbourIds.filter((id) => online.has(id)).length;
 
   const stats: Array<{
     to: string;
@@ -53,8 +60,8 @@ export function HomePage(): ReactElement {
       to: '/messages',
       icon: Users,
       label: t('home.neighboursOnline'),
-      value: `${online.size}`,
-      accent: online.size > 0 ? 'text-emerald-400' : 'text-muted-foreground',
+      value: `${neighboursOnline}`,
+      accent: neighboursOnline > 0 ? 'text-emerald-400' : 'text-muted-foreground',
     },
   ];
 

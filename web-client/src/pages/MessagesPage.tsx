@@ -17,6 +17,7 @@ import { useRealtime } from '../context/RealtimeContext.js';
 import { useNotifications } from '../context/NotificationsContext.js';
 import { useT } from '../i18n/I18nContext.js';
 import { ChatAttachment } from '../components/ChatAttachment.js';
+import { Avatar } from '../components/Avatar.js';
 import { Button } from '@/components/ui/button.js';
 import { Input } from '@/components/ui/input.js';
 import { Alert, AlertDescription } from '@/components/ui/alert.js';
@@ -235,14 +236,11 @@ export function MessagesPage(): ReactElement {
                   )}
                 >
                   {c.kind === 'public' ? (
-                    <Users className="size-4 shrink-0 text-primary" />
+                    <span className="brand-mark flex size-8 shrink-0 items-center justify-center rounded-full text-white">
+                      <Users className="size-4" />
+                    </span>
                   ) : (
-                    <span
-                      className={cn(
-                        'size-2.5 shrink-0 rounded-full',
-                        isOnline ? 'bg-emerald-500' : 'bg-muted-foreground/40',
-                      )}
-                    />
+                    <Avatar name={c.label} seed={c.peerId} size={32} online={isOnline} />
                   )}
                   <span className="min-w-0 flex-1 truncate">{c.label}</span>
                 </button>
