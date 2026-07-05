@@ -1,10 +1,13 @@
 import { useEffect, useState, type ReactElement } from 'react';
 import { Link } from 'react-router-dom';
 import { apiFetch } from '../lib/api.js';
+import { apiErrorMessage } from '../lib/apiError.js';
 import { useT } from '../i18n/I18nContext.js';
+import { PageHeader } from '../components/PageHeader.js';
 import { Button } from '@/components/ui/button.js';
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card.js';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card.js';
 import { Alert, AlertDescription } from '@/components/ui/alert.js';
+import { ListSkeleton } from '@/components/ui/skeleton.js';
 
 type Consents = {
   marketing: boolean;
@@ -16,23 +19,23 @@ export function PrivacyPage(): ReactElement {
   const t = useT();
   const [consents, setConsents] = useState<Consents | null>(null);
   const [exportJson, setExportJson] = useState<string | null>(null);
-  const [err, setErr] = useState<string | null>(null);
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
   useEffect(() => {
     void apiFetch<{ consents: Consents }>('/me/consents')
-      .then((r) => setConsents(r.consents))
-      .catch((e) => setErr(e instanceof Error ? e.message : t('common.error.generic')));
+      .then((response) => setConsents(response.consents))
+      .catch((error) => setErrorMessage(apiErrorMessage(error, t)));
   }, [t]);
 
-  async function saveConsents(next: Consents): Promise<void> {
+  async function saveConsents(nextConsents: Consents): Promise<void> {
     try {
-      const res = await apiFetch<{ consents: Consents }>('/me/consents', {
+      const response = await apiFetch<{ consents: Consents }>('/me/consents', {
         method: 'PATCH',
-        json: next,
+        json: nextConsents,
       });
-      setConsents(res.consents);
-    } catch (e) {
-      setErr(e instanceof Error ? e.message : t('common.error.generic'));
+      setConsents(response.consents);
+    } catch (error) {
+      setErrorMessage(apiErrorMessage(error, t));
     }
   }
 
@@ -40,68 +43,82 @@ export function PrivacyPage(): ReactElement {
     try {
       const data = await apiFetch<Record<string, unknown>>('/me/export');
       setExportJson(JSON.stringify(data, null, 2));
-    } catch (e) {
-      setErr(e instanceof Error ? e.message : t('common.error.generic'));
+    } catch (error) {
+      setErrorMessage(apiErrorMessage(error, t));
     }
   }
 
-  if (!consents) return <p className="text-muted-foreground">{t('privacy.loading')}</p>;
-
   return (
-    <Card>
-      <CardHeader>
-        <CardTitle className="text-xl">{t('privacy.title')}</CardTitle>
-        <CardDescription>{t('privacy.subtitle')}</CardDescription>
-      </CardHeader>
-      <CardContent className="space-y-6">
-        <div className="space-y-2">
-          <h2 className="text-lg font-semibold">{t('privacy.rights.title')}</h2>
-          <ul className="list-disc space-y-1 pl-5 text-sm text-muted-foreground">
-            <li>{t('privacy.rights.access')}</li>
-            <li>
-              {t('privacy.rights.rectification')}{' '}
-              <Link to="/compte" className="font-medium text-primary underline-offset-4 hover:underline">
-                {t('privacy.rights.accountLink')}
-              </Link>
-            </li>
-            <li>{t('privacy.rights.erasure')}</li>
-            <li>{t('privacy.rights.portability')}</li>
-          </ul>
-        </div>
+    <div>
+      <PageHeader title={t('privacy.title')} description={t('privacy.subtitle')} />
 
-        <div className="space-y-2">
-          <h2 className="text-lg font-semibold">{t('privacy.consents')}</h2>
-          {(Object.keys(consents) as (keyof Consents)[]).map((key) => (
-            <label key={key} className="flex items-center gap-2 text-sm">
-              <input
-                type="checkbox"
-                className="size-4"
-                checked={consents[key]}
-                onChange={(e) => void saveConsents({ ...consents, [key]: e.target.checked })}
-              />
-              {t(`privacy.consent.${key}`)}
-            </label>
-          ))}
-        </div>
+      {errorMessage ? (
+        <Alert variant="destructive" className="mb-4">
+          <AlertDescription>{errorMessage}</AlertDescription>
+        </Alert>
+      ) : null}
 
-        <div className="space-y-2">
-          <h2 className="text-lg font-semibold">{t('privacy.portability.title')}</h2>
-          <Button type="button" onClick={() => void exportData()}>
-            {t('privacy.export')}
-          </Button>
-          {exportJson ? (
-            <pre className="overflow-auto rounded-md border border-border bg-muted p-3 font-mono text-xs">
-              {exportJson}
-            </pre>
-          ) : null}
-        </div>
+      {!consents ? (
+        <ListSkeleton />
+      ) : (
+        <div className="space-y-6">
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-base">{t('privacy.rights.title')}</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <ul className="list-disc space-y-1 pl-5 text-sm text-muted-foreground">
+                <li>{t('privacy.rights.access')}</li>
+                <li>
+                  {t('privacy.rights.rectification')}{' '}
+                  <Link to="/compte" className="font-medium text-primary underline-offset-4 hover:underline">
+                    {t('privacy.rights.accountLink')}
+                  </Link>
+                </li>
+                <li>{t('privacy.rights.erasure')}</li>
+                <li>{t('privacy.rights.portability')}</li>
+              </ul>
+            </CardContent>
+          </Card>
 
-        {err ? (
-          <Alert variant="destructive">
-            <AlertDescription>{err}</AlertDescription>
-          </Alert>
-        ) : null}
-      </CardContent>
-    </Card>
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-base">{t('privacy.consents')}</CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-2">
+              {(Object.keys(consents) as (keyof Consents)[]).map((consentKey) => (
+                <label key={consentKey} className="flex items-center gap-2 text-sm">
+                  <input
+                    type="checkbox"
+                    className="size-4"
+                    checked={consents[consentKey]}
+                    onChange={(changeEvent) =>
+                      void saveConsents({ ...consents, [consentKey]: changeEvent.target.checked })
+                    }
+                  />
+                  {t(`privacy.consent.${consentKey}`)}
+                </label>
+              ))}
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-base">{t('privacy.portability.title')}</CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-3">
+              <Button type="button" variant="secondary" onClick={() => void exportData()}>
+                {t('privacy.export')}
+              </Button>
+              {exportJson ? (
+                <pre className="max-h-96 overflow-auto rounded-md border border-border bg-muted p-3 font-mono text-xs">
+                  {exportJson}
+                </pre>
+              ) : null}
+            </CardContent>
+          </Card>
+        </div>
+      )}
+    </div>
   );
 }

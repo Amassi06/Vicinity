@@ -6,27 +6,25 @@ import { useAuth } from '../context/AuthContext.js';
 import { useNotifications } from '../context/NotificationsContext.js';
 import { useRealtime } from '../context/RealtimeContext.js';
 import { useT } from '../i18n/I18nContext.js';
+import { useNeighbours } from '../hooks/useNeighbours.js';
 import { VicinityLogo } from '../components/VicinityLogo.js';
 
 export function HomePage(): ReactElement {
   const { user } = useAuth();
   const { counts } = useNotifications();
   const { online } = useRealtime();
+  const { neighbours } = useNeighbours();
   const t = useT();
   const [balance, setBalance] = useState<number | null>(null);
-  const [neighbourIds, setNeighbourIds] = useState<string[]>([]);
 
   useEffect(() => {
     void apiFetch<{ balance: number }>('/me/wallet')
-      .then((w) => setBalance(w.balance))
+      .then((wallet) => setBalance(wallet.balance))
       .catch(() => setBalance(null));
-    void apiFetch<{ items: Array<{ id: string }> }>('/me/neighbours')
-      .then((r) => setNeighbourIds(r.items.map((n) => n.id)))
-      .catch(() => setNeighbourIds([]));
   }, []);
 
   // Voisins réellement en ligne = habitants du quartier présents dans le registre temps réel.
-  const neighboursOnline = neighbourIds.filter((id) => online.has(id)).length;
+  const neighboursOnline = neighbours.filter((neighbour) => online.has(neighbour.id)).length;
 
   const stats: Array<{
     to: string;

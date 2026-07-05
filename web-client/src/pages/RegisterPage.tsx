@@ -43,12 +43,11 @@ export function RegisterPage(): ReactElement {
     try {
       await register(email.trim(), password, displayName.trim(), neighbourhoodId);
       nav('/');
-    } catch (ex) {
-      const msg =
-        ex instanceof Error && ex.message.includes('already')
-          ? t('register.errorExists')
-          : t('register.errorGeneric');
-      setErr(msg);
+    } catch (registerError) {
+      const code = registerError instanceof Error ? registerError.message : '';
+      setErr(
+        code === 'email_already_registered' ? t('register.errorExists') : t('register.errorGeneric'),
+      );
     }
   }
 

@@ -1,47 +1,32 @@
-import { useCallback, useEffect, useMemo, useState, type ReactElement } from 'react';
+import { useCallback, useMemo, type ReactElement } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { MessageCircle, Users } from 'lucide-react';
-import { apiFetch } from '../lib/api.js';
 import { useRealtime } from '../context/RealtimeContext.js';
 import { useT } from '../i18n/I18nContext.js';
+import { useNeighbours, type Neighbour } from '../hooks/useNeighbours.js';
 import { Avatar } from './Avatar.js';
-
-type Neighbour = { id: string; displayName: string; online: boolean };
 
 /** Sidebar de droite : habitants du quartier, présence en direct, DM en un clic. */
 export function NeighboursSidebar(): ReactElement {
   const { online } = useRealtime();
   const navigate = useNavigate();
   const t = useT();
-  const [items, setItems] = useState<Neighbour[]>([]);
-
-  const load = useCallback(async () => {
-    try {
-      const res = await apiFetch<{ items: Neighbour[] }>('/me/neighbours');
-      setItems(res.items);
-    } catch {
-      setItems([]);
-    }
-  }, []);
-
-  useEffect(() => {
-    void load();
-  }, [load]);
+  const { neighbours } = useNeighbours();
 
   const isOnline = useCallback(
-    (n: Neighbour) => online.has(n.id) || n.online,
+    (neighbour: Neighbour) => online.has(neighbour.id) || neighbour.online,
     [online],
   );
 
   // Tri : en ligne d'abord, puis alphabétique.
   const sorted = useMemo(
     () =>
-      [...items].sort((a, b) => {
-        const oa = isOnline(a) ? 0 : 1;
-        const ob = isOnline(b) ? 0 : 1;
-        return oa - ob || a.displayName.localeCompare(b.displayName);
+      [...neighbours].sort((first, second) => {
+        const firstRank = isOnline(first) ? 0 : 1;
+        const secondRank = isOnline(second) ? 0 : 1;
+        return firstRank - secondRank || first.displayName.localeCompare(second.displayName);
       }),
-    [items, isOnline],
+    [neighbours, isOnline],
   );
   const onlineCount = sorted.filter(isOnline).length;
 

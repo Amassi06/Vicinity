@@ -16,6 +16,8 @@ import { useAuth } from '../context/AuthContext.js';
 import { useRealtime } from '../context/RealtimeContext.js';
 import { useNotifications } from '../context/NotificationsContext.js';
 import { useT } from '../i18n/I18nContext.js';
+import { useNeighbours } from '../hooks/useNeighbours.js';
+import { useVoiceRecorder } from '../hooks/useVoiceRecorder.js';
 import { ChatAttachment } from '../components/ChatAttachment.js';
 import { Avatar } from '../components/Avatar.js';
 import { Button } from '@/components/ui/button.js';
@@ -32,33 +34,139 @@ type Message = {
   attachments: Attachment[];
   createdAt: string;
 };
-type Neighbour = { id: string; displayName: string; online: boolean };
 
 type Conversation =
   | { kind: 'public'; id: string; label: string }
   | { kind: 'dm'; id: string; label: string; peerId: string };
 
-function dmId(a: string, b: string): string {
-  return `dm:${[a, b].sort().join(':')}`;
+function dmConversationId(userIdA: string, userIdB: string): string {
+  return `dm:${[userIdA, userIdB].sort().join(':')}`;
+}
+
+/** Colonne de gauche : salon public + un message privé par voisin. */
+function ConversationList({
+  conversations,
+  activeId,
+  online,
+  onSelect,
+}: {
+  conversations: Conversation[];
+  activeId: string | null;
+  online: Set<string>;
+  onSelect: (conversation: Conversation) => void;
+}): ReactElement {
+  const t = useT();
+  return (
+    <div className="flex h-full min-h-0 flex-col overflow-hidden rounded-xl border border-border/70 bg-card/50 backdrop-blur-md">
+      <div className="border-b border-border/70 px-4 py-2.5 text-sm font-semibold">
+        {t('messages.title')}
+      </div>
+      <ul className="min-h-0 flex-1 overflow-y-auto p-1.5">
+        {conversations.map((conversation) => {
+          const isActive = activeId === conversation.id;
+          const isOnline = conversation.kind === 'dm' && online.has(conversation.peerId);
+          return (
+            <li key={conversation.id}>
+              <button
+                type="button"
+                onClick={() => onSelect(conversation)}
+                className={cn(
+                  'flex w-full items-center gap-2 rounded-md px-2.5 py-2 text-left text-sm transition-colors',
+                  isActive ? 'bg-accent font-medium' : 'hover:bg-accent/60',
+                )}
+              >
+                {conversation.kind === 'public' ? (
+                  <span className="brand-mark flex size-8 shrink-0 items-center justify-center rounded-full text-white">
+                    <Users className="size-4" />
+                  </span>
+                ) : (
+                  <Avatar
+                    name={conversation.label}
+                    seed={conversation.peerId}
+                    size={32}
+                    online={isOnline}
+                  />
+                )}
+                <span className="min-w-0 flex-1 truncate">{conversation.label}</span>
+              </button>
+            </li>
+          );
+        })}
+      </ul>
+    </div>
+  );
+}
+
+/** Bulle de message ; dans le salon public, identifie l'expéditeur (avatar + nom). */
+function MessageBubble({
+  message,
+  isMine,
+  senderName,
+  showSender,
+  conversationId,
+}: {
+  message: Message;
+  isMine: boolean;
+  senderName: string | null;
+  showSender: boolean;
+  conversationId: string;
+}): ReactElement {
+  return (
+    <div className={cn('flex flex-col', isMine ? 'items-end' : 'items-start')}>
+      {showSender && !isMine && senderName ? (
+        <span className="mb-1 flex items-center gap-1.5 px-1 text-xs text-muted-foreground">
+          <Avatar name={senderName} seed={message.senderId} size={18} />
+          {senderName}
+        </span>
+      ) : null}
+      <div
+        className={cn(
+          'max-w-[75%] rounded-2xl px-3 py-2 text-sm',
+          isMine
+            ? 'rounded-br-sm bg-primary text-primary-foreground'
+            : 'rounded-bl-sm bg-muted text-foreground',
+        )}
+      >
+        {message.body ? <p className="whitespace-pre-wrap break-words">{message.body}</p> : null}
+        {(message.attachments ?? []).map((attachment) => (
+          <ChatAttachment
+            key={attachment.storageKey}
+            conversationId={conversationId}
+            attachment={attachment}
+          />
+        ))}
+        <span className="mt-0.5 block text-[11px] opacity-70">
+          {new Date(message.createdAt).toLocaleTimeString([], {
+            hour: '2-digit',
+            minute: '2-digit',
+          })}
+        </span>
+      </div>
+    </div>
+  );
 }
 
 export function MessagesPage(): ReactElement {
   const { user } = useAuth();
   const { online, onMessage, joinConversation, leaveConversation } = useRealtime();
-  const { refresh: refreshNotifs } = useNotifications();
+  const { refresh: refreshNotifications } = useNotifications();
+  const { neighbours } = useNeighbours();
   const t = useT();
   const [params, setParams] = useSearchParams();
 
-  const [neighbours, setNeighbours] = useState<Neighbour[]>([]);
   const [active, setActive] = useState<Conversation | null>(null);
   const [messages, setMessages] = useState<Message[]>([]);
-  const [body, setBody] = useState('');
-  const [err, setErr] = useState<string | null>(null);
-  const [recording, setRecording] = useState(false);
-  const recorderRef = useRef<MediaRecorder | null>(null);
+  const [draft, setDraft] = useState('');
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
 
-  const publicConv: Conversation | null = useMemo(
+  const { recording, toggleRecording } = useVoiceRecorder({
+    onRecorded: (audioBlob, filename) => void uploadAndSend(audioBlob, 'audio', filename),
+    onMicrophoneDenied: () => setErrorMessage(t('messages.micDenied')),
+    onEmptyRecording: () => setErrorMessage(t('messages.emptyRecording')),
+  });
+
+  const publicConversation: Conversation | null = useMemo(
     () =>
       user?.neighbourhoodId
         ? { kind: 'public', id: `nbh:${user.neighbourhoodId}`, label: t('messages.publicRoom') }
@@ -66,41 +174,45 @@ export function MessagesPage(): ReactElement {
     [user?.neighbourhoodId, t],
   );
 
-  useEffect(() => {
-    void apiFetch<{ items: Neighbour[] }>('/me/neighbours')
-      .then((r) => setNeighbours(r.items))
-      .catch(() => setNeighbours([]));
-  }, []);
+  // Nom affiché par identifiant : voisins + moi-même (pour le salon public).
+  const displayNames = useMemo(() => {
+    const names = new Map<string, string>();
+    for (const neighbour of neighbours) names.set(neighbour.id, neighbour.displayName);
+    if (user) names.set(user.sub, user.displayName);
+    return names;
+  }, [neighbours, user]);
 
   // Sélection initiale : DM ciblé par la query (?dm=), sinon salon public.
   useEffect(() => {
-    const dm = params.get('dm');
-    const name = params.get('name');
-    if (dm && user) {
+    const dmPeerId = params.get('dm');
+    const dmPeerName = params.get('name');
+    if (dmPeerId && user) {
       setActive({
         kind: 'dm',
-        id: dmId(user.sub, dm),
-        label: name ?? t('messages.directMessage'),
-        peerId: dm,
+        id: dmConversationId(user.sub, dmPeerId),
+        label: dmPeerName ?? t('messages.directMessage'),
+        peerId: dmPeerId,
       });
       setParams({}, { replace: true });
-    } else if (!active && publicConv) {
-      setActive(publicConv);
+    } else if (!active && publicConversation) {
+      setActive(publicConversation);
     }
-  }, [params, user, publicConv, active, setParams, t]);
+  }, [params, user, publicConversation, active, setParams, t]);
 
   const loadMessages = useCallback(
-    async (conv: Conversation) => {
+    async (conversation: Conversation) => {
       try {
-        const res = await apiFetch<{ items: Message[] }>(`/conversations/${conv.id}/messages`);
-        setMessages(res.items);
-        await apiFetch(`/conversations/${conv.id}/read`, { method: 'POST' });
-        void refreshNotifs();
-      } catch (e) {
-        setErr(apiErrorMessage(e, t));
+        const response = await apiFetch<{ items: Message[] }>(
+          `/conversations/${conversation.id}/messages`,
+        );
+        setMessages(response.items);
+        await apiFetch(`/conversations/${conversation.id}/read`, { method: 'POST' });
+        void refreshNotifications();
+      } catch (error) {
+        setErrorMessage(apiErrorMessage(error, t));
       }
     },
-    [t, refreshNotifs],
+    [t, refreshNotifications],
   );
 
   // Rejoint la room active et charge son historique.
@@ -108,18 +220,18 @@ export function MessagesPage(): ReactElement {
     if (!active) return;
     joinConversation(active.id);
     void loadMessages(active);
-    const id = active.id;
-    return () => leaveConversation(id);
+    const activeId = active.id;
+    return () => leaveConversation(activeId);
   }, [active, joinConversation, leaveConversation, loadMessages]);
 
   // Messages temps réel de la conversation active.
   useEffect(() => {
     return onMessage((payload) => {
       if (!active || payload['conversationId'] !== active.id) return;
-      setMessages((prev) => {
+      setMessages((previous) => {
         const incoming = payload as unknown as Message;
-        if (prev.some((m) => m._id === incoming._id)) return prev;
-        return [...prev, incoming];
+        if (previous.some((message) => message._id === incoming._id)) return previous;
+        return [...previous, incoming];
       });
       if (payload['senderId'] !== user?.sub) {
         void apiFetch(`/conversations/${active.id}/read`, { method: 'POST' });
@@ -131,175 +243,113 @@ export function MessagesPage(): ReactElement {
     scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight });
   }, [messages]);
 
-  async function send(ev: FormEvent): Promise<void> {
-    ev.preventDefault();
-    if (!active || !body.trim()) return;
-    setErr(null);
+  async function send(formEvent: FormEvent): Promise<void> {
+    formEvent.preventDefault();
+    if (!active || !draft.trim()) return;
+    setErrorMessage(null);
     try {
       await apiFetch(`/conversations/${active.id}/messages`, {
         method: 'POST',
-        json: { body: body.trim() },
+        json: { body: draft.trim() },
       });
-      setBody('');
-    } catch (e) {
-      setErr(apiErrorMessage(e, t));
+      setDraft('');
+    } catch (error) {
+      setErrorMessage(apiErrorMessage(error, t));
     }
   }
 
-  async function uploadAndSend(file: Blob, kind: 'image' | 'audio', filename: string): Promise<void> {
+  async function uploadAndSend(
+    fileBlob: Blob,
+    kind: 'image' | 'audio',
+    filename: string,
+  ): Promise<void> {
     if (!active) return;
-    setErr(null);
+    setErrorMessage(null);
     try {
-      const form = new FormData();
-      form.append('file', file, filename);
-      form.append('kind', kind);
-      const att = await apiUpload<Attachment>(`/conversations/${active.id}/attachments`, form);
+      const formData = new FormData();
+      formData.append('file', fileBlob, filename);
+      formData.append('kind', kind);
+      const attachment = await apiUpload<Attachment>(
+        `/conversations/${active.id}/attachments`,
+        formData,
+      );
       await apiFetch(`/conversations/${active.id}/messages`, {
         method: 'POST',
-        json: { body: '', attachments: [att] },
+        json: { body: '', attachments: [attachment] },
       });
-    } catch (e) {
-      setErr(apiErrorMessage(e, t));
+    } catch (error) {
+      setErrorMessage(apiErrorMessage(error, t));
     }
   }
 
-  function onPickImage(ev: ChangeEvent<HTMLInputElement>): void {
-    const file = ev.target.files?.[0];
-    if (file) void uploadAndSend(file, 'image', file.name);
-    ev.target.value = '';
-  }
-
-  async function toggleRecording(): Promise<void> {
-    if (recording) {
-      recorderRef.current?.stop();
-      return;
-    }
-    try {
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-      // Choisit un type réellement supporté par le navigateur (Chrome/Firefox).
-      const preferred = ['audio/webm;codecs=opus', 'audio/webm', 'audio/ogg;codecs=opus', 'audio/mp4'];
-      const mimeType = preferred.find((m) => MediaRecorder.isTypeSupported(m));
-      const rec = new MediaRecorder(stream, mimeType ? { mimeType } : undefined);
-      const chunks: BlobPart[] = [];
-      rec.ondataavailable = (e) => {
-        if (e.data && e.data.size > 0) chunks.push(e.data);
-      };
-      rec.onstop = () => {
-        stream.getTracks().forEach((tr) => tr.stop());
-        setRecording(false);
-        const type = rec.mimeType || mimeType || 'audio/webm';
-        const blob = new Blob(chunks, { type });
-        if (blob.size === 0) {
-          setErr(t('messages.emptyRecording'));
-          return;
-        }
-        const ext = type.includes('mp4') ? 'm4a' : type.includes('ogg') ? 'ogg' : 'webm';
-        void uploadAndSend(blob, 'audio', `voice.${ext}`);
-      };
-      recorderRef.current = rec;
-      // timeslice : force un flush régulier des données audio.
-      rec.start(250);
-      setRecording(true);
-    } catch {
-      setErr(t('messages.micDenied'));
-    }
+  function onPickImage(changeEvent: ChangeEvent<HTMLInputElement>): void {
+    const pickedFile = changeEvent.target.files?.[0];
+    if (pickedFile) void uploadAndSend(pickedFile, 'image', pickedFile.name);
+    changeEvent.target.value = '';
   }
 
   const conversations: Conversation[] = useMemo(() => {
-    const list: Conversation[] = publicConv ? [publicConv] : [];
-    for (const n of neighbours) {
+    const list: Conversation[] = publicConversation ? [publicConversation] : [];
+    for (const neighbour of neighbours) {
       if (!user) continue;
-      list.push({ kind: 'dm', id: dmId(user.sub, n.id), label: n.displayName, peerId: n.id });
+      list.push({
+        kind: 'dm',
+        id: dmConversationId(user.sub, neighbour.id),
+        label: neighbour.displayName,
+        peerId: neighbour.id,
+      });
     }
     return list;
-  }, [publicConv, neighbours, user]);
+  }, [publicConversation, neighbours, user]);
 
   return (
-    <div className="grid grid-cols-1 gap-4 md:grid-cols-[220px_1fr]">
-      {/* Colonne conversations */}
-      <div className="rounded-lg border border-border bg-card">
-        <div className="border-b border-border px-3 py-2 text-sm font-semibold">
-          {t('messages.title')}
-        </div>
-        <ul className="max-h-[60vh] overflow-y-auto p-1.5">
-          {conversations.map((c) => {
-            const isActive = active?.id === c.id;
-            const isOnline = c.kind === 'dm' && online.has(c.peerId);
-            return (
-              <li key={c.id}>
-                <button
-                  type="button"
-                  onClick={() => setActive(c)}
-                  className={cn(
-                    'flex w-full items-center gap-2 rounded-md px-2.5 py-2 text-left text-sm transition-colors',
-                    isActive ? 'bg-accent font-medium' : 'hover:bg-accent/60',
-                  )}
-                >
-                  {c.kind === 'public' ? (
-                    <span className="brand-mark flex size-8 shrink-0 items-center justify-center rounded-full text-white">
-                      <Users className="size-4" />
-                    </span>
-                  ) : (
-                    <Avatar name={c.label} seed={c.peerId} size={32} online={isOnline} />
-                  )}
-                  <span className="min-w-0 flex-1 truncate">{c.label}</span>
-                </button>
-              </li>
-            );
-          })}
-        </ul>
+    <div className="flex h-[calc(100dvh-10rem)] min-h-[420px] flex-col gap-4 md:grid md:grid-cols-[240px_1fr]">
+      <div className="max-h-44 shrink-0 md:max-h-none md:min-h-0">
+        <ConversationList
+          conversations={conversations}
+          activeId={active?.id ?? null}
+          online={online}
+          onSelect={setActive}
+        />
       </div>
 
       {/* Fil de discussion */}
-      <div className="flex h-[70vh] flex-col rounded-lg border border-border bg-card">
-        <div className="border-b border-border px-4 py-2.5 text-sm font-semibold">
+      <div className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-xl border border-border/70 bg-card/50 backdrop-blur-md">
+        <div className="border-b border-border/70 px-4 py-2.5 text-sm font-semibold">
           {active?.label ?? t('messages.selectConversation')}
         </div>
-        <div ref={scrollRef} className="flex-1 space-y-2 overflow-y-auto p-4">
+        <div ref={scrollRef} className="min-h-0 flex-1 space-y-2 overflow-y-auto p-4">
           {!active ? (
             <p className="text-sm text-muted-foreground">{t('messages.selectConversation')}</p>
           ) : messages.length === 0 ? (
             <p className="text-sm text-muted-foreground">{t('messages.empty')}</p>
           ) : (
-            messages.map((m) => {
-              const mine = m.senderId === user?.sub;
-              return (
-                <div key={m._id} className={cn('flex', mine ? 'justify-end' : 'justify-start')}>
-                  <div
-                    className={cn(
-                      'max-w-[75%] rounded-2xl px-3 py-2 text-sm',
-                      mine
-                        ? 'rounded-br-sm bg-primary text-primary-foreground'
-                        : 'rounded-bl-sm bg-muted text-foreground',
-                    )}
-                  >
-                    {m.body ? <p className="whitespace-pre-wrap break-words">{m.body}</p> : null}
-                    {(m.attachments ?? []).map((a) => (
-                      <ChatAttachment key={a.storageKey} conversationId={active.id} attachment={a} />
-                    ))}
-                    <span className="mt-0.5 block text-[10px] opacity-70">
-                      {new Date(m.createdAt).toLocaleTimeString([], {
-                        hour: '2-digit',
-                        minute: '2-digit',
-                      })}
-                    </span>
-                  </div>
-                </div>
-              );
-            })
+            messages.map((message, messageIndex) => (
+              <MessageBubble
+                key={message._id}
+                message={message}
+                isMine={message.senderId === user?.sub}
+                senderName={displayNames.get(message.senderId) ?? null}
+                showSender={
+                  active.kind === 'public' &&
+                  messages[messageIndex - 1]?.senderId !== message.senderId
+                }
+                conversationId={active.id}
+              />
+            ))
           )}
         </div>
 
-        {err ? (
+        {errorMessage ? (
           <Alert variant="destructive" className="mx-3 mb-2">
-            <AlertDescription>{err}</AlertDescription>
+            <AlertDescription>{errorMessage}</AlertDescription>
           </Alert>
         ) : null}
 
         {active ? (
           <form
-            className="flex items-center gap-2 border-t border-border p-3"
-            onSubmit={(e) => void send(e)}
+            className="flex items-center gap-2 border-t border-border/70 p-3"
+            onSubmit={(formEvent) => void send(formEvent)}
           >
             <label className="flex size-9 cursor-pointer items-center justify-center rounded-md text-muted-foreground hover:bg-accent">
               <ImageIcon className="size-5" />
@@ -315,8 +365,8 @@ export function MessagesPage(): ReactElement {
               {recording ? <Square className="size-4" /> : <Mic className="size-4" />}
             </Button>
             <Input
-              value={body}
-              onChange={(e) => setBody(e.target.value)}
+              value={draft}
+              onChange={(changeEvent) => setDraft(changeEvent.target.value)}
               placeholder={t('messages.body')}
               className="flex-1"
             />

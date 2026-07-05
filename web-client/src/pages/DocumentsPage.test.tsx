@@ -2,12 +2,14 @@ import { render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { I18nProvider } from '../i18n/I18nContext.js';
+import { ToastProvider } from '../context/ToastContext.js';
 import { DocumentsPage } from './DocumentsPage.js';
-import { apiFetch } from '../lib/api.js';
+import { apiFetch, apiUpload } from '../lib/api.js';
 
 vi.mock('../lib/api.js', () => ({
   apiFetch: vi.fn(),
   apiFetchObjectUrl: vi.fn().mockResolvedValue('blob:fake'),
+  apiUpload: vi.fn(),
   getAccessToken: () => 'test-token',
 }));
 
@@ -37,7 +39,9 @@ const mockedApiFetch = vi.mocked(apiFetch);
 function renderPage(): ReturnType<typeof render> {
   return render(
     <I18nProvider>
-      <DocumentsPage />
+      <ToastProvider>
+        <DocumentsPage />
+      </ToastProvider>
     </I18nProvider>,
   );
 }
@@ -71,7 +75,7 @@ describe('DocumentsPage — list and empty state', () => {
 });
 
 describe('DocumentsPage — upload flow', () => {
-  it('shows a validation error and never calls fetch when no file was chosen', async () => {
+  it('shows a validation error and never uploads when no file was chosen', async () => {
     mockedApiFetch.mockResolvedValueOnce({ items: [] }).mockResolvedValueOnce({ items: [] });
     const user = userEvent.setup();
     renderPage();
@@ -79,7 +83,7 @@ describe('DocumentsPage — upload flow', () => {
     await user.type(screen.getByLabelText('Titre'), 'Bail');
     await user.click(screen.getByRole('button', { name: 'Téléverser' }));
     expect(await screen.findByRole('alert')).toHaveTextContent('Choisissez un PDF.');
-    expect(fetch).not.toHaveBeenCalled();
+    expect(vi.mocked(apiUpload)).not.toHaveBeenCalled();
   });
 });
 

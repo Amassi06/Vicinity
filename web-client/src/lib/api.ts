@@ -13,6 +13,11 @@ export function getAccessToken(): string {
   return accessToken;
 }
 
+/** Seul point d'accès au refresh token : les clés de stockage restent privées à ce module. */
+export function getRefreshToken(): string | null {
+  return sessionStorage.getItem('vicinity_refresh');
+}
+
 export function setTokens(access: string, refresh?: string): void {
   accessToken = access;
   sessionStorage.setItem('vicinity_access', access);

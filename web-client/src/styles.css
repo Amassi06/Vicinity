@@ -15,7 +15,7 @@
   --color-secondary: #1a1e28;
   --color-secondary-foreground: #cbd2e0;
   --color-muted: #161a24;
-  --color-muted-foreground: #8b93a7;
+  --color-muted-foreground: #99a2b6;
   --color-accent: #1a1e28;
   --color-accent-foreground: #e7e9ee;
   --color-destructive: #ef4444;
@@ -102,6 +102,17 @@
       transform 0.15s ease;
   }
 
+  /* Focus clavier cohérent partout ; les composants qui gèrent leur propre
+     ring (boutons shadcn) posent outline-none et ne sont donc pas doublés. */
+  :focus-visible {
+    outline: 2px solid color-mix(in oklab, var(--color-ring) 75%, transparent);
+    outline-offset: 2px;
+  }
+
+  input[type="checkbox"] {
+    accent-color: var(--color-primary);
+  }
+
   @media (prefers-reduced-motion: reduce) {
     * {
       transition: none !important;
@@ -127,14 +138,6 @@
   background:
     radial-gradient(600px 260px at 50% 0%, rgba(99, 102, 241, 0.18), transparent 70%),
     radial-gradient(420px 220px at 50% 10%, rgba(168, 85, 247, 0.14), transparent 70%);
-}
-
-.presence-online {
-  color: #22c55e;
-}
-
-.presence-offline {
-  color: #64748b;
 }
 
 /* Liseré supérieur subtil sur les cartes (effet lumière). */

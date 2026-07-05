@@ -13,6 +13,7 @@ import {
   apiFetch,
   authPostJson,
   getAccessToken,
+  getRefreshToken,
   logout as clearStored,
   setTokens as persistTokens,
   type AuthTokensResponse,
@@ -121,16 +122,12 @@ export function AuthProvider({ children }: { children: ReactNode }): ReactElemen
   );
 
   const logoutCb = useCallback(async () => {
-    const rt = sessionStorage.getItem('vicinity_refresh');
-    if (rt) {
+    const refreshToken = getRefreshToken();
+    if (refreshToken) {
       try {
-        await fetch('/api/auth/logout', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ refreshToken: rt }),
-        });
+        await authPostJson('/auth/logout', { refreshToken });
       } catch {
-        /* ignore */
+        /* la session locale est effacée même si le serveur ne répond pas */
       }
     }
     clearStored();

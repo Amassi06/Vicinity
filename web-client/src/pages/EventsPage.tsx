@@ -1,17 +1,24 @@
-import { FormEvent, useCallback, useEffect, useState, type ReactElement } from 'react';
+import { useCallback, useEffect, useState, type FormEvent, type ReactElement } from 'react';
+import { CalendarDays, Plus } from 'lucide-react';
 import { apiFetch } from '../lib/api.js';
 import { apiErrorMessage } from '../lib/apiError.js';
+import { nowAsDatetimeLocalValue } from '../lib/datetime.js';
 import { useAuth } from '../context/AuthContext.js';
 import { useNeighbourhoods } from '../context/NeighbourhoodContext.js';
+import { useToast } from '../context/ToastContext.js';
 import { useT } from '../i18n/I18nContext.js';
 import { useSwipe } from '../hooks/useSwipe.js';
+import { PageHeader } from '../components/PageHeader.js';
+import { EmptyState } from '../components/EmptyState.js';
+import { Modal } from '../components/Modal.js';
 import { Button } from '@/components/ui/button.js';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card.js';
 import { Input } from '@/components/ui/input.js';
+import { Label } from '@/components/ui/label.js';
 import { Alert, AlertDescription } from '@/components/ui/alert.js';
 import { Badge } from '@/components/ui/badge.js';
+import { ListSkeleton } from '@/components/ui/skeleton.js';
 
-type EventDoc = {
+type NeighbourhoodEvent = {
   _id: string;
   title: string;
   description?: string;
@@ -31,53 +38,58 @@ type InterestedView = {
   friendsInterested?: NamedUser[];
 };
 
-/** Valeur `datetime-local` minimale (maintenant) pour bloquer les dates passées. */
-function nowLocalValue(): string {
-  const now = new Date(Date.now() - new Date().getTimezoneOffset() * 60000);
-  return now.toISOString().slice(0, 16);
-}
-
 export function EventsPage(): ReactElement {
   const { selectedId } = useNeighbourhoods();
   const { user } = useAuth();
   const isAdmin = user?.role === 'ADMIN';
   const t = useT();
-  const [items, setItems] = useState<EventDoc[]>([]);
-  const [reco, setReco] = useState<EventDoc[]>([]);
-  const [views, setViews] = useState<Record<string, InterestedView>>({});
-  const [err, setErr] = useState<string | null>(null);
+  const { showToast } = useToast();
+
+  const [events, setEvents] = useState<NeighbourhoodEvent[]>([]);
+  const [recommendedEvents, setRecommendedEvents] = useState<NeighbourhoodEvent[]>([]);
+  const [interestedViews, setInterestedViews] = useState<Record<string, InterestedView>>({});
+  const [loading, setLoading] = useState(true);
+  const [creating, setCreating] = useState(false);
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
+
+  // Champs de la modale de création
   const [title, setTitle] = useState('');
   const [startsAt, setStartsAt] = useState('');
   const [endsAt, setEndsAt] = useState('');
-  const minDate = nowLocalValue();
+  const minDate = nowAsDatetimeLocalValue();
 
   const load = useCallback(async () => {
     if (!selectedId) {
-      setItems([]);
-      setReco([]);
+      setEvents([]);
+      setRecommendedEvents([]);
+      setLoading(false);
       return;
     }
-    setErr(null);
+    setErrorMessage(null);
     try {
-      const [list, recommendations] = await Promise.all([
-        apiFetch<{ items: EventDoc[] }>(`/events?neighbourhoodId=${selectedId}`),
-        apiFetch<{ items: EventDoc[] }>(`/events/recommendations?neighbourhoodId=${selectedId}`),
+      const [published, recommendations] = await Promise.all([
+        apiFetch<{ items: NeighbourhoodEvent[] }>(`/events?neighbourhoodId=${selectedId}`),
+        apiFetch<{ items: NeighbourhoodEvent[] }>(
+          `/events/recommendations?neighbourhoodId=${selectedId}`,
+        ),
       ]);
-      setItems(list.items);
-      setReco(recommendations.items);
-      const fetched: Record<string, InterestedView> = {};
+      setEvents(published.items);
+      setRecommendedEvents(recommendations.items);
+      const views: Record<string, InterestedView> = {};
       await Promise.all(
-        list.items.map(async (ev) => {
+        published.items.map(async (event) => {
           try {
-            fetched[ev._id] = await apiFetch<InterestedView>(`/events/${ev._id}/interested`);
+            views[event._id] = await apiFetch<InterestedView>(`/events/${event._id}/interested`);
           } catch {
-            /* ignore */
+            /* vue facultative : la liste reste utilisable sans elle */
           }
         }),
       );
-      setViews(fetched);
-    } catch (e) {
-      setErr(apiErrorMessage(e, t));
+      setInterestedViews(views);
+    } catch (error) {
+      setErrorMessage(apiErrorMessage(error, t));
+    } finally {
+      setLoading(false);
     }
   }, [selectedId, t]);
 
@@ -85,131 +97,172 @@ export function EventsPage(): ReactElement {
     void load();
   }, [load]);
 
-  async function create(ev: FormEvent): Promise<void> {
-    ev.preventDefault();
+  async function create(formEvent: FormEvent): Promise<void> {
+    formEvent.preventDefault();
     if (!selectedId) return;
-    setErr(null);
+    setErrorMessage(null);
     try {
-      const doc = await apiFetch<{ _id: string }>('/events', {
+      const created = await apiFetch<{ _id: string }>('/events', {
         method: 'POST',
         json: { neighbourhoodId: selectedId, title, startsAt, endsAt },
       });
-      await apiFetch(`/events/${String(doc._id)}/publish`, { method: 'POST' });
+      await apiFetch(`/events/${String(created._id)}/publish`, { method: 'POST' });
       setTitle('');
       setStartsAt('');
       setEndsAt('');
+      setCreating(false);
+      showToast(t('events.created'));
       await load();
-    } catch (e) {
-      const code = e instanceof Error ? e.message : '';
-      setErr(code === 'event_in_past' ? t('events.errorPast') : apiErrorMessage(e, t));
+    } catch (error) {
+      const code = error instanceof Error ? error.message : '';
+      setErrorMessage(code === 'event_in_past' ? t('events.errorPast') : apiErrorMessage(error, t));
     }
   }
 
   async function run(action: () => Promise<unknown>): Promise<void> {
-    setErr(null);
+    setErrorMessage(null);
     try {
       await action();
       await load();
-    } catch (e) {
-      setErr(apiErrorMessage(e, t));
+    } catch (error) {
+      setErrorMessage(apiErrorMessage(error, t));
     }
   }
 
-  const interest = (id: string): Promise<void> =>
-    run(() => apiFetch(`/events/${id}/interest`, { method: 'POST' }));
-  const decline = (id: string): Promise<void> =>
-    run(() => apiFetch(`/events/${id}/decline`, { method: 'POST' }));
-  const remove = (id: string): Promise<void> =>
-    run(() => apiFetch(`/events/${id}`, { method: 'DELETE' }));
+  const markInterested = (eventId: string): Promise<void> =>
+    run(() => apiFetch(`/events/${eventId}/interest`, { method: 'POST' }));
+  const markDeclined = (eventId: string): Promise<void> =>
+    run(() => apiFetch(`/events/${eventId}/decline`, { method: 'POST' }));
+  const removeEvent = (eventId: string): Promise<void> =>
+    run(() => apiFetch(`/events/${eventId}`, { method: 'DELETE' }));
 
   return (
-    <Card>
-      <CardHeader>
-        <CardTitle className="text-xl">{t('events.title')}</CardTitle>
-      </CardHeader>
-      <CardContent className="space-y-4">
-        {!selectedId ? (
-          <p className="text-muted-foreground">{t('common.selectNeighbourhood')}</p>
-        ) : (
-          <>
-            <form className="flex flex-wrap items-center gap-2" onSubmit={(e) => void create(e)}>
-              <Input
-                className="max-w-56"
-                placeholder={t('events.form.title')}
-                value={title}
-                onChange={(e) => setTitle(e.target.value)}
-                required
-              />
-              <Input
-                type="datetime-local"
-                className="max-w-56"
-                min={minDate}
-                value={startsAt}
-                onChange={(e) => setStartsAt(e.target.value)}
-                required
-              />
-              <Input
-                type="datetime-local"
-                className="max-w-56"
-                min={startsAt || minDate}
-                value={endsAt}
-                onChange={(e) => setEndsAt(e.target.value)}
-                required
-              />
-              <Button type="submit">{t('events.form.publish')}</Button>
-            </form>
-            {err ? (
-              <Alert variant="destructive">
-                <AlertDescription>{err}</AlertDescription>
-              </Alert>
-            ) : null}
-            <h2 className="text-lg font-semibold">{t('events.published')}</h2>
-            {items.length === 0 ? (
-              <div className="rounded-lg border border-dashed border-input p-8 text-center text-muted-foreground">
-                {t('events.empty')}
-              </div>
+    <div>
+      <PageHeader
+        title={t('events.title')}
+        description={t('events.subtitle')}
+        action={
+          selectedId ? (
+            <Button type="button" onClick={() => setCreating(true)}>
+              <Plus className="size-4" />
+              {t('events.new')}
+            </Button>
+          ) : undefined
+        }
+      />
+
+      {!selectedId ? (
+        <p className="text-muted-foreground">{t('common.selectNeighbourhood')}</p>
+      ) : (
+        <div className="space-y-6">
+          {errorMessage && !creating ? (
+            <Alert variant="destructive">
+              <AlertDescription>{errorMessage}</AlertDescription>
+            </Alert>
+          ) : null}
+
+          <section className="space-y-3">
+            <h2 className="text-sm font-semibold text-muted-foreground">{t('events.published')}</h2>
+            {loading ? (
+              <ListSkeleton />
+            ) : events.length === 0 ? (
+              <EmptyState icon={CalendarDays} text={t('events.empty')} />
             ) : (
               <ul className="space-y-2">
-                {items.map((ev) => (
+                {events.map((event) => (
                   <EventListItem
-                    key={ev._id}
-                    ev={ev}
-                    t={t}
+                    key={event._id}
+                    event={event}
                     userId={user?.sub}
-                    canDelete={isAdmin || ev.organizerId === user?.sub}
-                    view={views[ev._id]}
-                    onInterest={() => void interest(ev._id)}
-                    onDecline={() => void decline(ev._id)}
-                    onDelete={() => void remove(ev._id)}
+                    canDelete={isAdmin || event.organizerId === user?.sub}
+                    view={interestedViews[event._id]}
+                    onInterest={() => void markInterested(event._id)}
+                    onDecline={() => void markDeclined(event._id)}
+                    onDelete={() => void removeEvent(event._id)}
                   />
                 ))}
               </ul>
             )}
-            {reco.length > 0 ? (
-              <>
-                <h2 className="text-lg font-semibold">{t('events.recommendations')}</h2>
-                <ul className="space-y-2">
-                  {reco.map((ev) => (
-                    <li
-                      key={ev._id}
-                      className="rounded-lg border border-border bg-background/40 p-4 transition-colors hover:border-primary/40"
-                    >
-                      {ev.title}
-                    </li>
-                  ))}
-                </ul>
-              </>
+          </section>
+
+          {recommendedEvents.length > 0 ? (
+            <section className="space-y-3">
+              <h2 className="text-sm font-semibold text-muted-foreground">
+                {t('events.recommendations')}
+              </h2>
+              <ul className="space-y-2">
+                {recommendedEvents.map((event) => (
+                  <li
+                    key={event._id}
+                    className="rounded-lg border border-border bg-background/40 p-4 transition-colors hover:border-primary/40"
+                  >
+                    {event.title}
+                  </li>
+                ))}
+              </ul>
+            </section>
+          ) : null}
+        </div>
+      )}
+
+      {creating ? (
+        <Modal title={t('events.new')} onClose={() => setCreating(false)}>
+          <form className="space-y-3" onSubmit={(formEvent) => void create(formEvent)}>
+            <div className="space-y-1.5">
+              <Label htmlFor="event-title">{t('events.form.title')}</Label>
+              <Input
+                id="event-title"
+                value={title}
+                onChange={(changeEvent) => setTitle(changeEvent.target.value)}
+                required
+              />
+            </div>
+            <div className="flex flex-wrap gap-3">
+              <div className="space-y-1.5">
+                <Label htmlFor="event-starts">{t('events.form.startsAt')}</Label>
+                <Input
+                  id="event-starts"
+                  type="datetime-local"
+                  className="w-56"
+                  min={minDate}
+                  value={startsAt}
+                  onChange={(changeEvent) => setStartsAt(changeEvent.target.value)}
+                  required
+                />
+              </div>
+              <div className="space-y-1.5">
+                <Label htmlFor="event-ends">{t('events.form.endsAt')}</Label>
+                <Input
+                  id="event-ends"
+                  type="datetime-local"
+                  className="w-56"
+                  min={startsAt || minDate}
+                  value={endsAt}
+                  onChange={(changeEvent) => setEndsAt(changeEvent.target.value)}
+                  required
+                />
+              </div>
+            </div>
+            {errorMessage ? (
+              <Alert variant="destructive">
+                <AlertDescription>{errorMessage}</AlertDescription>
+              </Alert>
             ) : null}
-          </>
-        )}
-      </CardContent>
-    </Card>
+            <div className="flex justify-end gap-2 pt-2">
+              <Button type="button" variant="secondary" onClick={() => setCreating(false)}>
+                {t('common.cancel')}
+              </Button>
+              <Button type="submit">{t('events.form.publish')}</Button>
+            </div>
+          </form>
+        </Modal>
+      ) : null}
+    </div>
   );
 }
 
 function EventListItem({
-  ev,
-  t,
+  event,
   userId,
   canDelete,
   view,
@@ -217,8 +270,7 @@ function EventListItem({
   onDecline,
   onDelete,
 }: {
-  ev: EventDoc;
-  t: (key: string) => string;
+  event: NeighbourhoodEvent;
   userId: string | undefined;
   canDelete: boolean;
   view: InterestedView | undefined;
@@ -226,12 +278,12 @@ function EventListItem({
   onDecline: () => void;
   onDelete: () => void;
 }): ReactElement {
+  const t = useT();
   const swipe = useSwipe({ onSwipeLeft: onDecline, onSwipeRight: onInterest });
-  const isInterested = !!userId && ev.interested.includes(userId);
-  const isDeclined = !!userId && ev.declined.includes(userId);
+  const isInterested = !!userId && event.interested.includes(userId);
+  const isDeclined = !!userId && event.declined.includes(userId);
 
-  const friends = view?.friendsInterested ?? [];
-  const friendNames = friends.map((f) => f.displayName);
+  const friendNames = (view?.friendsInterested ?? []).map((friend) => friend.displayName);
 
   return (
     <li
@@ -240,8 +292,8 @@ function EventListItem({
       className="rounded-lg border border-border bg-background/40 p-4 transition-colors hover:border-primary/40"
     >
       <div className="flex flex-wrap items-center gap-2">
-        <strong className="text-sm">{ev.title}</strong>
-        <Badge variant="secondary">{new Date(ev.startsAt).toLocaleString()}</Badge>
+        <strong className="text-sm">{event.title}</strong>
+        <Badge variant="secondary">{new Date(event.startsAt).toLocaleString()}</Badge>
         {isInterested ? <Badge>{t('events.status.interested')}</Badge> : null}
         {isDeclined ? <Badge variant="destructive">{t('events.status.declined')}</Badge> : null}
       </div>
@@ -252,7 +304,7 @@ function EventListItem({
             <>
               {t('events.interestedCount')} {view.total}
               {view.interested && view.interested.length > 0
-                ? ` — ${view.interested.map((u) => u.displayName).join(', ')}`
+                ? ` — ${view.interested.map((person) => person.displayName).join(', ')}`
                 : ''}
             </>
           ) : friendNames.length > 0 ? (

@@ -10,8 +10,10 @@ import * as pdfjsLib from 'pdfjs-dist';
 import type { PDFDocumentProxy, PDFPageProxy } from 'pdfjs-dist';
 import pdfWorkerUrl from 'pdfjs-dist/build/pdf.worker.mjs?url';
 import { apiFetch, getAccessToken } from '../lib/api.js';
+import { apiErrorMessage } from '../lib/apiError.js';
 import { toCanvasPoint, isZoneTooSmall, buildZoneFromCorners, type Point } from '../lib/zoneGeometry.js';
 import { useT } from '../i18n/I18nContext.js';
+import { useNeighbours } from '../hooks/useNeighbours.js';
 import { Button } from '@/components/ui/button.js';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card.js';
 import { Input } from '@/components/ui/input.js';
@@ -46,14 +48,8 @@ export function ZoneEditor({
   const [manualWidth, setManualWidth] = useState('');
   const [manualHeight, setManualHeight] = useState('');
   // Signataires choisis parmi les habitants du quartier (par leur nom).
-  const [neighbours, setNeighbours] = useState<Array<{ id: string; displayName: string }>>([]);
+  const { neighbours } = useNeighbours();
   const [selectedSigners, setSelectedSigners] = useState<Set<string>>(new Set());
-
-  useEffect(() => {
-    void apiFetch<{ items: Array<{ id: string; displayName: string }> }>('/me/neighbours')
-      .then((r) => setNeighbours(r.items))
-      .catch(() => setNeighbours([]));
-  }, []);
 
   useEffect(() => {
     const controller = new AbortController();
@@ -178,7 +174,7 @@ export function ZoneEditor({
       setMsg(t('documents.zoneEditor.saved'));
       onSaved();
     } catch (e) {
-      setErr(e instanceof Error ? e.message : t('common.error.generic'));
+      setErr(apiErrorMessage(e, t));
     } finally {
       setSaving(false);
     }

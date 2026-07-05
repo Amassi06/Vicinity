@@ -1,9 +1,13 @@
 import { useEffect, useState, type ReactElement } from 'react';
+import { ArrowDownLeft, ArrowUpRight, ReceiptText, Wallet as WalletIcon } from 'lucide-react';
 import { apiFetch } from '../lib/api.js';
+import { apiErrorMessage } from '../lib/apiError.js';
 import { useT } from '../i18n/I18nContext.js';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card.js';
+import { PageHeader } from '../components/PageHeader.js';
+import { EmptyState } from '../components/EmptyState.js';
+import { ListSkeleton, Skeleton } from '@/components/ui/skeleton.js';
 import { Alert, AlertDescription } from '@/components/ui/alert.js';
-import { Badge } from '@/components/ui/badge.js';
+import { cn } from '@/lib/utils.js';
 
 type WalletTransaction = {
   id: string;
@@ -21,72 +25,113 @@ type Wallet = { balance: number; recent?: WalletTransaction[] };
 export function WalletPage(): ReactElement {
   const t = useT();
   const [wallet, setWallet] = useState<Wallet | null>(null);
-  const [err, setErr] = useState<string | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
   useEffect(() => {
-    void (async () => {
-      try {
-        const w = await apiFetch<Wallet>('/me/wallet');
-        setWallet(w);
-      } catch (e) {
-        setErr(e instanceof Error ? e.message : t('common.error.generic'));
-      }
-    })();
+    let mounted = true;
+    apiFetch<Wallet>('/me/wallet')
+      .then((response) => {
+        if (mounted) setWallet(response);
+      })
+      .catch((error) => {
+        if (mounted) setErrorMessage(apiErrorMessage(error, t));
+      })
+      .finally(() => {
+        if (mounted) setLoading(false);
+      });
+    return () => {
+      mounted = false;
+    };
   }, [t]);
 
+  const transactions = wallet?.recent ?? [];
+
   return (
-    <Card>
-      <CardHeader>
-        <CardTitle className="text-xl">{t('wallet.title')}</CardTitle>
-      </CardHeader>
-      <CardContent>
-        {err ? (
-          <Alert variant="destructive">
-            <AlertDescription>{err}</AlertDescription>
-          </Alert>
-        ) : null}
-        {wallet ? (
-          <>
-            <p className="text-xl">
-              {t('wallet.balance')} <strong>{wallet.balance}</strong> {t('wallet.points')}
+    <div>
+      <PageHeader title={t('wallet.title')} description={t('wallet.subtitle')} />
+
+      {errorMessage ? (
+        <Alert variant="destructive" className="mb-4">
+          <AlertDescription>{errorMessage}</AlertDescription>
+        </Alert>
+      ) : null}
+
+      {/* Solde en héros : l'information principale de la page, en un coup d'œil. */}
+      <section className="card-sheen mb-8 flex items-center gap-4 rounded-xl border border-border/70 bg-card/70 p-6 backdrop-blur-md">
+        <span className="brand-mark flex size-12 shrink-0 items-center justify-center rounded-xl text-white">
+          <WalletIcon className="size-6" />
+        </span>
+        <div>
+          <p className="text-sm text-muted-foreground">{t('wallet.balance')}</p>
+          {loading ? (
+            <Skeleton className="mt-1 h-9 w-28" />
+          ) : (
+            <p className="text-3xl font-semibold tabular-nums">
+              {wallet?.balance ?? '—'}{' '}
+              <span className="text-base font-normal text-muted-foreground">
+                {t('wallet.points')}
+              </span>
             </p>
-            <h3 className="mt-4 text-sm font-semibold">{t('wallet.history.title')}</h3>
-            {!wallet.recent || wallet.recent.length === 0 ? (
-              <p className="text-muted-foreground">{t('wallet.history.empty')}</p>
-            ) : (
-              <ul className="mt-2 space-y-2">
-                {wallet.recent.map((tx) => (
-                  <li
-                    key={tx.id}
-                    className="flex flex-wrap items-center gap-2 rounded-lg border border-border bg-background/40 p-3"
-                  >
-                    <Badge variant={tx.direction === 'CREDIT' ? 'success' : 'secondary'}>
-                      {tx.direction === 'CREDIT' ? t('wallet.history.received') : t('wallet.history.sent')}
-                    </Badge>
-                    <strong>
-                      {tx.direction === 'CREDIT' ? '+' : '-'}
-                      {tx.amount} {t('wallet.points')}
-                    </strong>
-                    <span className="text-sm text-muted-foreground">
-                      {t(`wallet.reason.${tx.reason}`)}
-                    </span>
-                    {tx.contractId ? (
-                      <span className="text-xs text-muted-foreground">
-                        {t('wallet.contractRef')} {tx.contractId.slice(-6)}
-                      </span>
-                    ) : null}
-                    <span className="text-sm text-muted-foreground">
-                      {new Date(tx.createdAt).toLocaleString()}
-                    </span>
-                  </li>
-                ))}
-              </ul>
-            )}
-          </>
+          )}
+        </div>
+      </section>
+
+      <section className="space-y-3">
+        <h2 className="text-sm font-semibold text-muted-foreground">{t('wallet.history.title')}</h2>
+        {loading ? (
+          <ListSkeleton />
+        ) : transactions.length === 0 ? (
+          <EmptyState icon={ReceiptText} text={t('wallet.history.empty')} />
         ) : (
-          <p className="text-muted-foreground">{t('common.loading')}</p>
+          <ul className="space-y-2">
+            {transactions.map((transaction) => {
+              const isCredit = transaction.direction === 'CREDIT';
+              return (
+                <li
+                  key={transaction.id}
+                  className="flex items-center gap-3 rounded-lg border border-border bg-background/40 p-3"
+                >
+                  <span
+                    className={cn(
+                      'flex size-9 shrink-0 items-center justify-center rounded-full',
+                      isCredit
+                        ? 'bg-emerald-500/10 text-emerald-400'
+                        : 'bg-secondary text-muted-foreground',
+                    )}
+                  >
+                    {isCredit ? (
+                      <ArrowDownLeft className="size-4" />
+                    ) : (
+                      <ArrowUpRight className="size-4" />
+                    )}
+                  </span>
+                  <div className="min-w-0 flex-1">
+                    <p className="truncate text-sm font-medium">
+                      {t(`wallet.reason.${transaction.reason}`)}
+                    </p>
+                    <p className="text-xs text-muted-foreground">
+                      {new Date(transaction.createdAt).toLocaleString()}
+                      {transaction.contractId
+                        ? ` · ${t('wallet.contractRef')} ${transaction.contractId.slice(-6)}`
+                        : ''}
+                    </p>
+                  </div>
+                  <span
+                    className={cn(
+                      'text-sm font-semibold tabular-nums',
+                      isCredit ? 'text-emerald-400' : 'text-foreground',
+                    )}
+                  >
+                    {isCredit ? '+' : '−'}
+                    {transaction.amount} {t('wallet.points')}
+                  </span>
+                </li>
+              );
+            })}
+          </ul>
         )}
-      </CardContent>
-    </Card>
+      </section>
+    </div>
   );
 }

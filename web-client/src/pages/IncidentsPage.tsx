@@ -1,17 +1,23 @@
-import { FormEvent, useCallback, useEffect, useState, type ReactElement } from 'react';
+import { useCallback, useEffect, useState, type FormEvent, type ReactElement } from 'react';
+import { Plus, TriangleAlert } from 'lucide-react';
 import { apiFetch } from '../lib/api.js';
 import { apiErrorMessage } from '../lib/apiError.js';
 import { useAuth } from '../context/AuthContext.js';
 import { useNeighbourhoods } from '../context/NeighbourhoodContext.js';
+import { useToast } from '../context/ToastContext.js';
 import { useT } from '../i18n/I18nContext.js';
+import { PageHeader } from '../components/PageHeader.js';
+import { EmptyState } from '../components/EmptyState.js';
+import { Modal } from '../components/Modal.js';
 import { Button } from '@/components/ui/button.js';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card.js';
 import { Input } from '@/components/ui/input.js';
+import { Label } from '@/components/ui/label.js';
 import { Alert, AlertDescription } from '@/components/ui/alert.js';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select.js';
 import { Badge } from '@/components/ui/badge.js';
+import { ListSkeleton } from '@/components/ui/skeleton.js';
 
-type IncidentDoc = {
+type Incident = {
   _id: string;
   title: string;
   description: string;
@@ -31,32 +37,43 @@ export function IncidentsPage(): ReactElement {
   const { selectedId } = useNeighbourhoods();
   const { user } = useAuth();
   const t = useT();
-  const [items, setItems] = useState<IncidentDoc[]>([]);
+  const { showToast } = useToast();
+
+  const [incidents, setIncidents] = useState<Incident[]>([]);
   const [categories, setCategories] = useState<IncidentCategory[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [creating, setCreating] = useState(false);
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
+
+  // Champs de la modale de signalement
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
   const [category, setCategory] = useState('');
-  const [err, setErr] = useState<string | null>(null);
 
   useEffect(() => {
     void apiFetch<{ items: IncidentCategory[] }>('/incident-categories')
-      .then((r) => {
-        setCategories(r.items);
-        if (r.items.length > 0) setCategory((prev) => prev || r.items[0]!.slug);
+      .then((response) => {
+        setCategories(response.items);
+        if (response.items.length > 0) setCategory((previous) => previous || response.items[0]!.slug);
       })
       .catch(() => setCategories([]));
   }, []);
 
   const load = useCallback(async () => {
     if (!selectedId) {
-      setItems([]);
+      setIncidents([]);
+      setLoading(false);
       return;
     }
     try {
-      const res = await apiFetch<{ items: IncidentDoc[] }>(`/incidents?neighbourhoodId=${selectedId}`);
-      setItems(res.items);
-    } catch (e) {
-      setErr(apiErrorMessage(e, t));
+      const response = await apiFetch<{ items: Incident[] }>(
+        `/incidents?neighbourhoodId=${selectedId}`,
+      );
+      setIncidents(response.items);
+    } catch (error) {
+      setErrorMessage(apiErrorMessage(error, t));
+    } finally {
+      setLoading(false);
     }
   }, [selectedId, t]);
 
@@ -65,12 +82,12 @@ export function IncidentsPage(): ReactElement {
   }, [load]);
 
   const categoryLabel = (slug: string): string =>
-    categories.find((c) => c.slug === slug)?.label ?? slug;
+    categories.find((incidentCategory) => incidentCategory.slug === slug)?.label ?? slug;
 
-  async function create(ev: FormEvent): Promise<void> {
-    ev.preventDefault();
+  async function create(formEvent: FormEvent): Promise<void> {
+    formEvent.preventDefault();
     if (!selectedId) return;
-    setErr(null);
+    setErrorMessage(null);
     try {
       await apiFetch('/incidents', {
         method: 'POST',
@@ -78,106 +95,143 @@ export function IncidentsPage(): ReactElement {
       });
       setTitle('');
       setDescription('');
+      setCreating(false);
+      showToast(t('incidents.reported'));
       await load();
-    } catch (e) {
-      setErr(apiErrorMessage(e, t));
+    } catch (error) {
+      setErrorMessage(apiErrorMessage(error, t));
     }
   }
 
-  async function setStatus(id: string, status: IncidentDoc['status']): Promise<void> {
-    setErr(null);
+  async function setStatus(incidentId: string, status: Incident['status']): Promise<void> {
+    setErrorMessage(null);
     try {
-      await apiFetch(`/incidents/${id}`, { method: 'PATCH', json: { status } });
+      await apiFetch(`/incidents/${incidentId}`, { method: 'PATCH', json: { status } });
       await load();
-    } catch (e) {
-      setErr(apiErrorMessage(e, t));
+    } catch (error) {
+      setErrorMessage(apiErrorMessage(error, t));
     }
   }
 
   return (
-    <Card>
-      <CardHeader>
-        <CardTitle className="text-xl">{t('incidents.title')}</CardTitle>
-      </CardHeader>
-      <CardContent className="space-y-4">
-        {!selectedId ? (
-          <p className="text-muted-foreground">{t('common.selectNeighbourhood')}</p>
-        ) : (
-          <>
-            <form className="flex flex-wrap items-center gap-2" onSubmit={(e) => void create(e)}>
+    <div>
+      <PageHeader
+        title={t('incidents.title')}
+        description={t('incidents.subtitle')}
+        action={
+          selectedId ? (
+            <Button type="button" onClick={() => setCreating(true)}>
+              <Plus className="size-4" />
+              {t('incidents.new')}
+            </Button>
+          ) : undefined
+        }
+      />
+
+      {!selectedId ? (
+        <p className="text-muted-foreground">{t('common.selectNeighbourhood')}</p>
+      ) : (
+        <div className="space-y-4">
+          {errorMessage && !creating ? (
+            <Alert variant="destructive">
+              <AlertDescription>{errorMessage}</AlertDescription>
+            </Alert>
+          ) : null}
+
+          {loading ? (
+            <ListSkeleton />
+          ) : incidents.length === 0 ? (
+            <EmptyState icon={TriangleAlert} text={t('incidents.empty')} />
+          ) : (
+            <ul className="space-y-2">
+              {incidents.map((incident) => (
+                <li
+                  key={incident._id}
+                  className="rounded-lg border border-border bg-background/40 p-4 transition-colors hover:border-primary/40"
+                >
+                  <div className="flex flex-wrap items-center gap-2">
+                    <strong className="text-sm">{incident.title}</strong>
+                    <Badge variant="secondary">{categoryLabel(incident.category)}</Badge>
+                    <Badge variant={STATUS_BADGE_VARIANT[incident.status]}>
+                      {t(`incidents.status.${incident.status}`)}
+                    </Badge>
+                  </div>
+                  <p className="mt-1 text-sm text-muted-foreground">{incident.description}</p>
+                  {user?.role === 'ADMIN' ? (
+                    <Select
+                      value={incident.status}
+                      onValueChange={(value) =>
+                        void setStatus(incident._id, value as Incident['status'])
+                      }
+                    >
+                      <SelectTrigger className="mt-2.5 w-44">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="open">{t('incidents.status.open')}</SelectItem>
+                        <SelectItem value="in_progress">{t('incidents.status.in_progress')}</SelectItem>
+                        <SelectItem value="resolved">{t('incidents.status.resolved')}</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  ) : null}
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
+      )}
+
+      {creating ? (
+        <Modal title={t('incidents.new')} onClose={() => setCreating(false)}>
+          <form className="space-y-3" onSubmit={(formEvent) => void create(formEvent)}>
+            <div className="space-y-1.5">
+              <Label htmlFor="incident-title">{t('incidents.form.title')}</Label>
               <Input
-                className="max-w-56"
+                id="incident-title"
                 value={title}
-                onChange={(e) => setTitle(e.target.value)}
-                placeholder={t('incidents.form.title')}
+                onChange={(changeEvent) => setTitle(changeEvent.target.value)}
                 required
               />
+            </div>
+            <div className="space-y-1.5">
+              <Label htmlFor="incident-description">{t('incidents.form.description')}</Label>
               <Input
-                className="max-w-56"
+                id="incident-description"
                 value={description}
-                onChange={(e) => setDescription(e.target.value)}
-                placeholder={t('incidents.form.description')}
+                onChange={(changeEvent) => setDescription(changeEvent.target.value)}
               />
+            </div>
+            <div className="space-y-1.5">
+              <Label>{t('incidents.form.category')}</Label>
               <Select value={category} onValueChange={setCategory}>
-                <SelectTrigger className="w-48">
+                <SelectTrigger className="w-full">
                   <SelectValue placeholder={t('incidents.form.categoryPlaceholder')} />
                 </SelectTrigger>
                 <SelectContent>
-                  {categories.map((c) => (
-                    <SelectItem key={c.slug} value={c.slug}>
-                      {c.label}
+                  {categories.map((incidentCategory) => (
+                    <SelectItem key={incidentCategory.slug} value={incidentCategory.slug}>
+                      {incidentCategory.label}
                     </SelectItem>
                   ))}
                 </SelectContent>
               </Select>
+            </div>
+            {errorMessage ? (
+              <Alert variant="destructive">
+                <AlertDescription>{errorMessage}</AlertDescription>
+              </Alert>
+            ) : null}
+            <div className="flex justify-end gap-2 pt-2">
+              <Button type="button" variant="secondary" onClick={() => setCreating(false)}>
+                {t('common.cancel')}
+              </Button>
               <Button type="submit" disabled={categories.length === 0}>
                 {t('incidents.form.report')}
               </Button>
-            </form>
-            {err ? (
-              <Alert variant="destructive">
-                <AlertDescription>{err}</AlertDescription>
-              </Alert>
-            ) : null}
-            {items.length === 0 ? (
-              <div className="rounded-lg border border-dashed border-input p-8 text-center text-muted-foreground">
-                {t('incidents.empty')}
-              </div>
-            ) : (
-              <ul className="space-y-2">
-                {items.map((i) => (
-                  <li
-                    key={i._id}
-                    className="rounded-lg border border-border bg-background/40 p-4 transition-colors hover:border-primary/40"
-                  >
-                    <div className="flex flex-wrap items-center gap-2">
-                      <strong className="text-sm">{i.title}</strong>
-                      <Badge variant="secondary">{categoryLabel(i.category)}</Badge>
-                      <Badge variant={STATUS_BADGE_VARIANT[i.status]}>{t(`incidents.status.${i.status}`)}</Badge>
-                    </div>
-                    <p className="mt-1 text-sm text-muted-foreground">{i.description}</p>
-                    {user?.role === 'ADMIN' ? (
-                      <Select
-                        value={i.status}
-                        onValueChange={(v) => void setStatus(i._id, v as IncidentDoc['status'])}
-                      >
-                        <SelectTrigger className="mt-2.5 w-44">
-                          <SelectValue />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="open">{t('incidents.status.open')}</SelectItem>
-                          <SelectItem value="in_progress">{t('incidents.status.in_progress')}</SelectItem>
-                          <SelectItem value="resolved">{t('incidents.status.resolved')}</SelectItem>
-                        </SelectContent>
-                      </Select>
-                    ) : null}
-                  </li>
-                ))}
-              </ul>
-            )}
-          </>
-        )}
-      </CardContent>
-    </Card>
+            </div>
+          </form>
+        </Modal>
+      ) : null}
+    </div>
   );
 }

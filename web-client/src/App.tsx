@@ -3,6 +3,7 @@ import type { ReactElement } from 'react';
 import { AuthProvider } from './context/AuthContext.js';
 import { RealtimeProvider } from './context/RealtimeContext.js';
 import { NotificationsProvider } from './context/NotificationsContext.js';
+import { ToastProvider } from './context/ToastContext.js';
 import { I18nProvider } from './i18n/I18nContext.js';
 import { AppShell, RequireAuthGate } from './layout/AppShell.js';
 import { AuthLayout } from './layout/AuthLayout.js';
@@ -29,30 +30,32 @@ export function App(): ReactElement {
         <AuthProvider>
           <RealtimeProvider>
             <NotificationsProvider>
-          <Routes>
-            <Route element={<AuthLayout />}>
-              <Route path="/login" element={<LoginPage />} />
-              <Route path="/register" element={<RegisterPage />} />
-            </Route>
-            <Route element={<AppShell />}>
-              <Route element={<RequireAuthGate />}>
-                <Route element={<NeighbourhoodOutlet />}>
-                  <Route path="/" element={<HomePage />} />
-                  <Route path="/quartiers" element={<QuartiersPage />} />
-                  <Route path="/evenements" element={<EventsPage />} />
-                  <Route path="/annonces" element={<ListingsPage />} />
-                  <Route path="/sondages" element={<PollsPage />} />
-                  <Route path="/messages" element={<MessagesPage />} />
-                  <Route path="/portefeuille" element={<WalletPage />} />
-                  <Route path="/documents" element={<DocumentsPage />} />
-                  <Route path="/incidents" element={<IncidentsPage />} />
-                  <Route path="/mfa" element={<MfaPage />} />
-                  <Route path="/compte" element={<AccountPage />} />
-                  <Route path="/confidentialite" element={<PrivacyPage />} />
-                </Route>
-              </Route>
-            </Route>
-          </Routes>
+              <ToastProvider>
+                <Routes>
+                  <Route element={<AuthLayout />}>
+                    <Route path="/login" element={<LoginPage />} />
+                    <Route path="/register" element={<RegisterPage />} />
+                  </Route>
+                  <Route element={<AppShell />}>
+                    <Route element={<RequireAuthGate />}>
+                      <Route element={<NeighbourhoodOutlet />}>
+                        <Route path="/" element={<HomePage />} />
+                        <Route path="/quartiers" element={<QuartiersPage />} />
+                        <Route path="/evenements" element={<EventsPage />} />
+                        <Route path="/annonces" element={<ListingsPage />} />
+                        <Route path="/sondages" element={<PollsPage />} />
+                        <Route path="/messages" element={<MessagesPage />} />
+                        <Route path="/portefeuille" element={<WalletPage />} />
+                        <Route path="/documents" element={<DocumentsPage />} />
+                        <Route path="/incidents" element={<IncidentsPage />} />
+                        <Route path="/mfa" element={<MfaPage />} />
+                        <Route path="/compte" element={<AccountPage />} />
+                        <Route path="/confidentialite" element={<PrivacyPage />} />
+                      </Route>
+                    </Route>
+                  </Route>
+                </Routes>
+              </ToastProvider>
             </NotificationsProvider>
           </RealtimeProvider>
         </AuthProvider>
