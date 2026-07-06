@@ -4,9 +4,10 @@ info:
   version: 0.0.0
   description: |
     API REST de Vicinity. Le document couvre les routes actives du backend
-    Node.js + Express pour l'authentification, les quartiers, les services,
-    les documents signés, les événements, la messagerie, les votes, le DSL,
-    le RGPD et les plugins.
+    Node.js + Express pour l'authentification, les quartiers, les annonces et
+    contrats de services, les documents signés, les événements, les incidents,
+    la messagerie multimédia, les votes, le DSL, le RGPD, les statistiques
+    d'administration et les plugins.
 servers:
   - url: http://localhost:3000
     description: Backend de développement
@@ -176,6 +177,13 @@ paths:
       responses:
         '204':
           description: Quartier supprimé
+  /neighbourhoods/public:
+    get:
+      summary: Lister les quartiers proposés à l'inscription (public)
+      security: []
+      responses:
+        '200':
+          description: Quartiers (id + nom)
   /neighbourhoods/lookup/point:
     get:
       summary: Rechercher les quartiers contenant un point
@@ -213,6 +221,165 @@ paths:
       responses:
         '204':
           description: Points crédités
+  /listing-categories:
+    get:
+      summary: Lister les catégories d'annonces
+      responses:
+        '200':
+          description: Catégories
+  /listings:
+    get:
+      summary: Lister les annonces d'un quartier
+      parameters:
+        - $ref: '#/components/parameters/NeighbourhoodQuery'
+      responses:
+        '200':
+          description: Annonces
+    post:
+      summary: Publier une annonce (offre ou demande de service)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ListingCreate'
+      responses:
+        '201':
+          description: Annonce créée
+  /listings/{id}:
+    get:
+      summary: Consulter une annonce
+      parameters:
+        - $ref: '#/components/parameters/ListingId'
+      responses:
+        '200':
+          description: Annonce
+  /listings/{id}/accept:
+    post:
+      summary: Accepter une annonce (crée le contrat si payante)
+      parameters:
+        - $ref: '#/components/parameters/ListingId'
+      responses:
+        '200':
+          description: Annonce acceptée
+        '409':
+          description: Déjà acceptée ou annonce de l'utilisateur
+  /listings/{id}/cancel:
+    post:
+      summary: Annuler sa propre annonce
+      parameters:
+        - $ref: '#/components/parameters/ListingId'
+      responses:
+        '200':
+          description: Annonce annulée
+  /contracts/{id}:
+    get:
+      summary: Consulter un contrat (payeur ou prestataire uniquement)
+      parameters:
+        - $ref: '#/components/parameters/ContractId'
+      responses:
+        '200':
+          description: Contrat
+        '403':
+          description: Non participant
+  /contracts/{id}/sign:
+    post:
+      summary: Signer le contrat (le séquestre part à la 2e signature)
+      parameters:
+        - $ref: '#/components/parameters/ContractId'
+      responses:
+        '200':
+          description: Signature enregistrée
+        '402':
+          description: Solde de points insuffisant
+  /contracts/{id}/complete:
+    post:
+      summary: Terminer le contrat (verse le séquestre au prestataire)
+      parameters:
+        - $ref: '#/components/parameters/ContractId'
+      responses:
+        '200':
+          description: Contrat terminé
+  /contracts/{id}/cancel:
+    post:
+      summary: Annuler le contrat (rembourse le séquestre)
+      parameters:
+        - $ref: '#/components/parameters/ContractId'
+      responses:
+        '200':
+          description: Contrat annulé
+  /incident-categories:
+    get:
+      summary: Lister les catégories d'incidents
+      responses:
+        '200':
+          description: Catégories
+  /incidents:
+    get:
+      summary: Lister les incidents d'un quartier
+      parameters:
+        - $ref: '#/components/parameters/NeighbourhoodQuery'
+      responses:
+        '200':
+          description: Incidents
+    post:
+      summary: Signaler un incident
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/IncidentCreate'
+      responses:
+        '201':
+          description: Incident signalé
+  /incidents/{id}:
+    patch:
+      summary: Changer le statut d'un incident (admin)
+      parameters:
+        - $ref: '#/components/parameters/IncidentId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [status]
+              properties:
+                status:
+                  type: string
+                  enum: [open, in_progress, resolved]
+      responses:
+        '200':
+          description: Incident mis à jour
+        '403':
+          description: Réservé aux administrateurs
+  /me/profile:
+    patch:
+      summary: Modifier son profil (e-mail protégé par TOTP si MFA actif)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ProfilePatch'
+      responses:
+        '200':
+          description: Profil mis à jour
+        '401':
+          description: Code TOTP requis ou invalide
+  /me/neighbours:
+    get:
+      summary: Lister les habitants de son quartier (avec présence)
+      responses:
+        '200':
+          description: Voisins (id, nom, en ligne)
+  /me/notifications:
+    get:
+      summary: Compteurs de non-lus (messages, documents à signer)
+      responses:
+        '200':
+          description: Compteurs
   /documents:
     get:
       summary: Lister les documents de l'utilisateur
@@ -230,6 +397,12 @@ paths:
       responses:
         '201':
           description: Document importé
+  /documents/inbox:
+    get:
+      summary: Lister les documents reçus en attente de ma signature
+      responses:
+        '200':
+          description: Documents à signer
   /documents/{id}:
     get:
       summary: Consulter les métadonnées d'un document
@@ -256,17 +429,30 @@ paths:
           description: Document mis à jour
   /documents/{id}/zones/{index}/sign:
     post:
-      summary: Signer une zone
+      summary: Signer une zone (signature manuscrite, TOTP si MFA actif)
       parameters:
         - $ref: '#/components/parameters/DocumentId'
-        - in: path
-          name: index
-          required: true
-          schema:
-            type: integer
+        - $ref: '#/components/parameters/ZoneIndex'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SignZoneRequest'
       responses:
         '200':
           description: Signature enregistrée
+        '401':
+          description: Code MFA requis ou invalide
+  /documents/{id}/zones/{index}/signature:
+    get:
+      summary: Télécharger l'image de signature d'une zone signée
+      parameters:
+        - $ref: '#/components/parameters/DocumentId'
+        - $ref: '#/components/parameters/ZoneIndex'
+      responses:
+        '200':
+          description: Image PNG de la signature
   /events:
     get:
       summary: Lister les événements publiés
@@ -316,6 +502,22 @@ paths:
       responses:
         '200':
           description: Déclinaison enregistrée
+  /events/{id}/interested:
+    get:
+      summary: Vue des intéressés (totaux ; noms pour admin, amis pour habitant)
+      parameters:
+        - $ref: '#/components/parameters/EventId'
+      responses:
+        '200':
+          description: Intéressés
+  /events/{id}:
+    delete:
+      summary: Supprimer un événement (organisateur ou admin)
+      parameters:
+        - $ref: '#/components/parameters/EventId'
+      responses:
+        '204':
+          description: Événement supprimé
   /conversations/{cid}/messages:
     get:
       summary: Lire les messages récents d'une conversation
@@ -325,12 +527,49 @@ paths:
         '200':
           description: Messages
     post:
-      summary: Envoyer un message
+      summary: Envoyer un message (texte et/ou pièces jointes)
       parameters:
         - $ref: '#/components/parameters/ConversationId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/MessageCreate'
       responses:
         '201':
           description: Message créé
+  /conversations/{cid}/read:
+    post:
+      summary: Marquer la conversation comme lue
+      parameters:
+        - $ref: '#/components/parameters/ConversationId'
+      responses:
+        '204':
+          description: Marquée lue
+  /conversations/{cid}/attachments:
+    post:
+      summary: Téléverser une pièce jointe (photo ou vocal)
+      parameters:
+        - $ref: '#/components/parameters/ConversationId'
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/AttachmentUpload'
+      responses:
+        '201':
+          description: Pièce jointe stockée (à référencer dans un message)
+  /conversations/{cid}/attachments/{key}:
+    get:
+      summary: Télécharger une pièce jointe
+      parameters:
+        - $ref: '#/components/parameters/ConversationId'
+        - $ref: '#/components/parameters/AttachmentKey'
+      responses:
+        '200':
+          description: Fichier binaire
   /polls:
     get:
       summary: Lister les sondages d'un quartier
@@ -393,6 +632,21 @@ paths:
       responses:
         '200':
           description: Catalogue des plugins
+  /admin/stats:
+    get:
+      summary: Statistiques de participation par quartier (admin, client desktop)
+      responses:
+        '200':
+          description: Comptages (annonces, événements, sondages, incidents)
+        '403':
+          description: Réservé aux administrateurs
+  /desktop/latest-version:
+    get:
+      summary: Dernière version du client desktop (mises à jour automatiques)
+      security: []
+      responses:
+        '200':
+          description: Version et URL de téléchargement
 components:
   securitySchemes:
     bearerAuth:
@@ -431,10 +685,47 @@ components:
       required: true
       schema:
         type: string
+    ListingId:
+      in: path
+      name: id
+      required: true
+      schema:
+        type: string
+    ContractId:
+      in: path
+      name: id
+      required: true
+      schema:
+        type: string
+    IncidentId:
+      in: path
+      name: id
+      required: true
+      schema:
+        type: string
+    ZoneIndex:
+      in: path
+      name: index
+      required: true
+      schema:
+        type: integer
+    AttachmentKey:
+      in: path
+      name: key
+      required: true
+      schema:
+        type: string
+    NeighbourhoodQuery:
+      in: query
+      name: neighbourhoodId
+      required: true
+      schema:
+        type: string
+        format: uuid
   schemas:
     SignupRequest:
       type: object
-      required: [email, password, displayName]
+      required: [email, password, displayName, neighbourhoodId]
       properties:
         email:
           type: string
@@ -443,6 +734,10 @@ components:
           type: string
         displayName:
           type: string
+        neighbourhoodId:
+          type: string
+          format: uuid
+          description: Quartier de rattachement (obligatoire à l'inscription)
     LoginRequest:
       type: object
       required: [email, password]
@@ -452,6 +747,10 @@ components:
           format: email
         password:
           type: string
+        mfaToken:
+          type: string
+          description: Code TOTP à 6 chiffres, exigé si le MFA est activé
+          example: '123456'
     RefreshRequest:
       type: object
       required: [refreshToken]
@@ -474,3 +773,100 @@ components:
         file:
           type: string
           format: binary
+    ListingCreate:
+      type: object
+      required: [neighbourhoodId, title, kind, category, pricePoints]
+      properties:
+        neighbourhoodId:
+          type: string
+          format: uuid
+        title:
+          type: string
+        description:
+          type: string
+        kind:
+          type: string
+          enum: [offer, request]
+        category:
+          type: string
+          description: Slug d'une catégorie de /listing-categories
+        location:
+          type: string
+        serviceDate:
+          type: string
+          format: date-time
+        pricePoints:
+          type: integer
+          minimum: 0
+          description: 0 = service gratuit (pas de contrat), sinon contrat obligatoire
+    IncidentCreate:
+      type: object
+      required: [neighbourhoodId, title, category]
+      properties:
+        neighbourhoodId:
+          type: string
+          format: uuid
+        title:
+          type: string
+        description:
+          type: string
+        category:
+          type: string
+          description: Slug d'une catégorie de /incident-categories
+    ProfilePatch:
+      type: object
+      properties:
+        displayName:
+          type: string
+        email:
+          type: string
+          format: email
+          description: Changement protégé par TOTP si le MFA est activé
+        mfaToken:
+          type: string
+          example: '123456'
+        neighbourhoodId:
+          type: string
+          format: uuid
+    SignZoneRequest:
+      type: object
+      required: [signatureImage]
+      properties:
+        signatureImage:
+          type: string
+          description: Signature manuscrite en data URL PNG (max 500 Ko)
+          example: 'data:image/png;base64,iVBORw0…'
+        mfaToken:
+          type: string
+          description: Code TOTP, exigé si le MFA du signataire est activé
+    MessageCreate:
+      type: object
+      required: [body]
+      properties:
+        body:
+          type: string
+          description: Peut être vide si le message ne porte que des pièces jointes
+        attachments:
+          type: array
+          items:
+            type: object
+            properties:
+              storageKey:
+                type: string
+              contentType:
+                type: string
+              size:
+                type: integer
+              kind:
+                type: string
+                enum: [image, audio, file]
+    AttachmentUpload:
+      type: object
+      required: [file, kind]
+      properties:
+        file:
+          type: string
+          format: binary
+        kind:
+          type: string
+          enum: [image, audio]
