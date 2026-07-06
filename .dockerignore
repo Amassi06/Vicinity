@@ -1,0 +1,15 @@
+**/node_modules
+**/dist
+**/coverage
+**/.env
+**/.env.*
+!**/.env.*.example
+desktop-client/build
+desktop-client/.gradle
+desktop-client/bin
+.git
+.github
+docs/*.md
+**/*.log
+# Stockage local des documents (runtime) — pas le module src/storage.
+backend/storage

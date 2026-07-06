@@ -49,3 +49,11 @@ tasks.shadowJar {
     }
     archiveClassifier.set("")
 }
+
+// Le shadow jar (classifier vide) remplace le jar standard : on désactive `jar`
+// pour que les deux tâches n'écrivent pas le même fichier, et on déclare la
+// dépendance des tâches de distribution vers `shadowJar` (exigé par Gradle 8).
+tasks.jar { enabled = false }
+tasks.named("distZip") { dependsOn(tasks.shadowJar) }
+tasks.named("distTar") { dependsOn(tasks.shadowJar) }
+tasks.named("startScripts") { dependsOn(tasks.shadowJar) }

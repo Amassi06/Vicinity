@@ -11,4 +11,9 @@ module.exports = {
   clearMocks: true,
   collectCoverageFrom: ['src/**/*.ts', '!src/server.ts'],
   coverageDirectory: 'coverage',
+  // Les suites d'intégration partagent des connexions singleton (Prisma,
+  // Mongoose, Neo4j) : une fois le résumé affiché, on force la sortie du
+  // process plutôt que d'attendre la fermeture de chaque keep-alive
+  // (le job CI pendait 6 h sans ça).
+  forceExit: true,
 };

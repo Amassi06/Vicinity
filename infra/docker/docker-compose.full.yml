@@ -1,0 +1,72 @@
+# Surcouche APPLICATIONS — environnement complet conteneurisé.
+# S'empile sur docker-compose.dev.yml (bases) et ajoute backend + web + admin :
+#   make up-full
+# (équivalent : docker compose --env-file infra/docker/.env.dev \
+#    -f infra/docker/docker-compose.dev.yml -f infra/docker/docker-compose.full.yml \
+#    up -d --build)
+#
+# Ports exposés :
+#   backend   → 3000  (API + Socket.IO ; utilisé aussi par le client desktop)
+#   web       → 8080  (site résidents)
+#   web-admin → 8081  (back-office)
+
+name: ${COMPOSE_PROJECT_NAME:-cn-dev}
+
+services:
+  backend:
+    build:
+      context: ../..
+      dockerfile: backend/Dockerfile
+    container_name: cn-backend
+    restart: unless-stopped
+    environment:
+      NODE_ENV: production
+      PORT: "3000"
+      DATABASE_URL: postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}?schema=public
+      MONGO_URL: mongodb://${MONGO_INITDB_ROOT_USERNAME}:${MONGO_INITDB_ROOT_PASSWORD}@mongo:27017/${MONGO_INITDB_DATABASE}?authSource=admin
+      NEO4J_URL: bolt://neo4j:7687
+      NEO4J_USER: neo4j
+      NEO4J_PASSWORD: ${NEO4J_PASSWORD}
+      STORAGE_BACKEND: minio
+      MINIO_ENDPOINT: http://minio:9000
+      MINIO_ACCESS_KEY: ${MINIO_ROOT_USER}
+      MINIO_SECRET_KEY: ${MINIO_ROOT_PASSWORD}
+      # À surcharger hors développement (32 caractères minimum).
+      JWT_ACCESS_SECRET: ${JWT_ACCESS_SECRET:-dev-access-secret-change-me-in-prod-please-32chars+}
+      JWT_REFRESH_SECRET: ${JWT_REFRESH_SECRET:-dev-refresh-secret-change-me-in-prod-please-32chars+}
+    ports:
+      - "3000:3000"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      mongo:
+        condition: service_healthy
+      neo4j:
+        condition: service_healthy
+      minio:
+        condition: service_healthy
+    networks: [cn_backend]
+
+  web-client:
+    build:
+      context: ../..
+      dockerfile: web-client/Dockerfile
+    container_name: cn-web
+    restart: unless-stopped
+    ports:
+      - "8080:80"
+    depends_on:
+      - backend
+    networks: [cn_backend]
+
+  web-admin:
+    build:
+      context: ../..
+      dockerfile: web-admin/Dockerfile
+    container_name: cn-web-admin
+    restart: unless-stopped
+    ports:
+      - "8081:80"
+    depends_on:
+      - backend
+    networks: [cn_backend]

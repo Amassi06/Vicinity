@@ -33,7 +33,10 @@ const SQUARE = {
   ],
 };
 
-async function makeAdmin(app: ReturnType<typeof createApp>, email: string): Promise<string> {
+async function makeAdmin(
+  app: ReturnType<typeof createApp>,
+  email: string,
+): Promise<{ token: string; id: string }> {
   const signup = await request(app)
     .post('/auth/signup')
     .send({ email, password: 'sup3rstrongpass', displayName: 'Admin', neighbourhoodId: await ensureTestNeighbourhood() });
@@ -42,7 +45,7 @@ async function makeAdmin(app: ReturnType<typeof createApp>, email: string): Prom
   const relogin = await request(app)
     .post('/auth/login')
     .send({ email, password: 'sup3rstrongpass' });
-  return (relogin.body as AuthBody).accessToken ?? accessToken;
+  return { token: (relogin.body as AuthBody).accessToken ?? accessToken, id: user.id };
 }
 
 describe('Neighbourhoods CRUD', () => {
@@ -55,26 +58,29 @@ describe('Neighbourhoods CRUD', () => {
 
   beforeAll(async () => {
     await prisma.$connect();
-    adminToken = await makeAdmin(app, `__test__admin_${Date.now()}@example.com`);
+    const admin = await makeAdmin(app, `__test__admin_${Date.now()}@example.com`);
+    adminToken = admin.token;
+    adminId = admin.id;
     const habitant = await request(app).post('/auth/signup').send({
       email: `__test__user_${Date.now()}@example.com`,
       password: 'sup3rstrongpass',
       displayName: 'Habitant',
+      neighbourhoodId: await ensureTestNeighbourhood(),
     });
     const habitantBody = habitant.body as AuthBody;
     userToken = habitantBody.accessToken;
     userId = habitantBody.user.id;
-
-    const admins = await prisma.user.findMany({ where: { role: 'ADMIN' } });
-    adminId = admins[0]?.id ?? '';
   }, TIMEOUT_MS);
 
   afterAll(async () => {
+    // On ne supprime QUE les quartiers créés par cette suite : le quartier
+    // partagé (`ensureTestNeighbourhood`) reste pour les suites suivantes.
     await prisma.$executeRawUnsafe(
-      `DELETE FROM neighbourhoods WHERE name LIKE '__test__%'`,
+      `DELETE FROM neighbourhoods WHERE name LIKE '__test__%' AND name NOT LIKE '__test__shared%' AND name NOT LIKE '__test__other%'`,
     );
-    await prisma.session.deleteMany({ where: { userId: { in: [adminId, userId] } } });
-    await prisma.user.deleteMany({ where: { id: { in: [adminId, userId] } } });
+    const ids = [adminId, userId].filter(Boolean);
+    await prisma.session.deleteMany({ where: { userId: { in: ids } } });
+    await prisma.user.deleteMany({ where: { id: { in: ids } } });
     await prisma.$disconnect();
   }, TIMEOUT_MS);
 

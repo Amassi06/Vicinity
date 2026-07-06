@@ -300,6 +300,7 @@ describe('Listings — catégories, séquestre, contrats', () => {
     const accept = await request(app)
       .post(`/listings/${String(listing?._id)}/accept`)
       .set('Authorization', `Bearer ${acceptorToken}`);
+    expect(accept.status).toBe(201);
     const contractId = (accept.body as AcceptResp).contract._id;
 
     const res = await request(app)

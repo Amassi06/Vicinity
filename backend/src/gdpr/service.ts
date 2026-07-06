@@ -24,7 +24,7 @@ export function getConsents(userId: string): ConsentState {
 export async function updateConsents(
   userId: string,
   patch: Partial<ConsentState>,
-  ipAddress?: string | null | undefined,
+  ipAddress?: string | null,
 ): Promise<ConsentState> {
   const current = getConsents(userId);
   const next = { ...current, ...patch };
@@ -43,7 +43,7 @@ export async function updateConsents(
   return next;
 }
 
-export async function exportUserData(userId: string, ipAddress?: string | null | undefined) {
+export async function exportUserData(userId: string, ipAddress?: string | null) {
   const user = await prisma.user.findUnique({
     where: { id: userId },
     select: {
@@ -126,7 +126,7 @@ export async function updateProfile(
   userId: string,
   patch: ProfilePatch,
   mfaToken: string | undefined,
-  ipAddress?: string | null | undefined,
+  ipAddress?: string | null,
 ): Promise<{ id: string; email: string; displayName: string }> {
   const user = await prisma.user.findUnique({ where: { id: userId } });
   if (!user) throw new Error('user_not_found');
@@ -166,7 +166,7 @@ export async function updateProfile(
 
 export async function deleteUserAccount(
   userId: string,
-  ipAddress?: string | null | undefined,
+  ipAddress?: string | null,
 ): Promise<void> {
   const user = await prisma.user.findUnique({ where: { id: userId } });
   if (!user || user.status === 'DELETED') {

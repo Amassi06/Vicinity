@@ -18,15 +18,18 @@ interface Neighbourhood {
   name: string;
 }
 
+// Zones volontairement éloignées de Paris : le quartier partagé des tests
+// (`ensureTestNeighbourhood`, Paris centre) ne doit pas interférer avec les
+// assertions de chevauchement.
 const ZONE_A = {
   type: 'Polygon' as const,
   coordinates: [
     [
-      [2.30, 48.80],
-      [2.40, 48.80],
-      [2.40, 48.90],
-      [2.30, 48.90],
-      [2.30, 48.80],
+      [20.30, 45.80],
+      [20.40, 45.80],
+      [20.40, 45.90],
+      [20.30, 45.90],
+      [20.30, 45.80],
     ],
   ],
 };
@@ -36,11 +39,11 @@ const ZONE_B = {
   type: 'Polygon' as const,
   coordinates: [
     [
-      [2.35, 48.85],
-      [2.45, 48.85],
-      [2.45, 48.95],
-      [2.35, 48.95],
-      [2.35, 48.85],
+      [20.35, 45.85],
+      [20.45, 45.85],
+      [20.45, 45.95],
+      [20.35, 45.95],
+      [20.35, 45.85],
     ],
   ],
 };
@@ -84,7 +87,10 @@ describe('Neighbourhood spatial queries', () => {
   }, TIMEOUT_MS);
 
   afterAll(async () => {
-    await prisma.$executeRawUnsafe(`DELETE FROM neighbourhoods WHERE name LIKE '__test__%'`);
+    // Uniquement les zones de cette suite : le quartier partagé reste en place.
+    await prisma.$executeRawUnsafe(
+      `DELETE FROM neighbourhoods WHERE name LIKE '__test__A\\_%' OR name LIKE '__test__B\\_%'`,
+    );
     await prisma.session.deleteMany({ where: { userId: adminId } });
     await prisma.user.delete({ where: { id: adminId } });
     await prisma.$disconnect();
@@ -92,7 +98,7 @@ describe('Neighbourhood spatial queries', () => {
 
   it('point inside ZONE_A only returns only A', async () => {
     const res = await request(app)
-      .get('/neighbourhoods/lookup/point?lon=2.32&lat=48.82')
+      .get('/neighbourhoods/lookup/point?lon=20.32&lat=45.82')
       .set('Authorization', `Bearer ${adminToken}`);
     expect(res.status).toBe(200);
     const matches = (res.body as { matches: Neighbourhood[] }).matches;
@@ -101,7 +107,7 @@ describe('Neighbourhood spatial queries', () => {
 
   it('point in overlap returns both A and B', async () => {
     const res = await request(app)
-      .get('/neighbourhoods/lookup/point?lon=2.37&lat=48.87')
+      .get('/neighbourhoods/lookup/point?lon=20.37&lat=45.87')
       .set('Authorization', `Bearer ${adminToken}`);
     expect(res.status).toBe(200);
     const ids = (res.body as { matches: Neighbourhood[] }).matches.map((m) => m.id).sort();

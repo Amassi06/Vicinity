@@ -44,6 +44,16 @@ const ContractSchema = new Schema<ContractEntity>(
   { timestamps: true, collection: 'contracts' },
 );
 
-ContractSchema.index({ listingId: 1 }, { unique: true });
+// Unicité limitée aux contrats en attente de signatures : elle bloque le
+// double-accept concurrent (E11000 → 409) sans empêcher de ré-accepter une
+// annonce dont le contrat précédent a été annulé.
+ContractSchema.index(
+  { listingId: 1 },
+  {
+    unique: true,
+    name: 'uniq_pending_contract_per_listing',
+    partialFilterExpression: { status: 'pending_signatures' },
+  },
+);
 
 export const ContractModel = mongoose.model<ContractEntity>('Contract', ContractSchema);

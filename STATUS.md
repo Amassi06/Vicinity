@@ -27,7 +27,7 @@ Ce document liste, pour chaque exigence du cahier des charges (voir [README.md](
 | Extensibilité générique (ajout de modules sans toucher au code) | ✅ | Registre de modules générique, chaque route s'auto-enregistre — `backend/src/plugins/module-registry.ts` |
 | Sécurité : MFA / SSO / rôles | ✅ | TOTP (otplib), endpoint SSO pour le client Java, rôles HABITANT/MODERATOR/ADMIN — `backend/src/auth/` |
 | RGPD | ✅ | Export, suppression (anonymisation), gestion des consentements, journal d'audit — `backend/src/gdpr/service.ts` |
-| Conteneurisation + tests | ✅ | Docker Compose (Postgres/PostGIS, MongoDB, Neo4j, MinIO), 17 suites de tests (unitaires/intégration) — `infra/docker/docker-compose.yml`, `backend/tests/` |
+| Conteneurisation + tests | ✅ | Dockerfile multi-étapes par application, 23 suites de tests (unitaires/intégration) vertes sur base vierge — `backend/Dockerfile`, `infra/docker/`, `backend/tests/` |
 | Bases de données (Postgres/PostGIS + MongoDB + Neo4j) | ✅ | Prisma (Postgres), Mongoose (MongoDB), neo4j-driver (graphe social) |
 | Langage de requête maison (lex/yacc) | ✅ | Grammaire jison (lex/yacc) compilée en parser réel — `lex-yacc/grammar/mongo-dsl.jison`, intégré dans `backend/src/dsl/mini-find-lang.ts` |
 | Documentation Swagger/OpenAPI | ✅ | Spec exposée via `/openapi.yaml` et `/docs` — `backend/src/http/openapi.ts`, `docs/api/openapi.yaml` |
@@ -64,8 +64,8 @@ Ce document liste, pour chaque exigence du cahier des charges (voir [README.md](
 
 | Fonctionnalité | Statut | Détail |
 |---|---|---|
-| Conteneurisation | ✅ | Postgres/PostGIS, MongoDB, Neo4j, MinIO avec healthchecks — `infra/docker/docker-compose.yml` |
-| CI (build/test) | ✅ | Jobs backend, web (client+admin), desktop (Gradle) — `.github/workflows/ci.yml` |
+| Conteneurisation | ✅ | Deux environnements : DEV (`make up`, bases seules) et FULL (`make up-full`, bases + backend + web + admin conteneurisés derrière nginx) — `infra/docker/docker-compose.dev.yml`, `docker-compose.full.yml`, Dockerfiles par application |
+| CI (build/test) | ✅ | Jobs backend (intégration sur bases de service), web (build + vitest), desktop (Gradle), docker (build des 3 images), `timeout-minutes` sur chaque job — `.github/workflows/ci.yml` |
 | Documentation (schémas, Swagger, modélisation BDD) | ✅ | Swagger/OpenAPI (`docs/api/openapi.yaml`), schémas d'architecture/conteneurs/SSO (`docs/architecture.md`), modélisation Postgres/Mongo/Neo4j/H2 (`docs/database-model.md`) |
 
 ---

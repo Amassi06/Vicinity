@@ -13,7 +13,8 @@ const STAMP = Date.now();
 const RESIDENT = `__stats_resident_${STAMP}@example.com`;
 const ADMIN = `__stats_admin_${STAMP}@example.com`;
 const PASSWORD = 'sup3rstrongpass';
-const NEIGHBOURHOOD_ID = '00000000-0000-0000-0000-000000000003';
+const CATEGORY_SLUG = `__stats-cat-${STAMP}`;
+let NEIGHBOURHOOD_ID = '';
 
 interface AuthBody {
   accessToken: string;
@@ -37,6 +38,12 @@ describe('Admin stats — participation counts', () => {
 
   beforeAll(async () => {
     await Promise.all([prisma.$connect(), connectMongo()]);
+    NEIGHBOURHOOD_ID = await ensureTestNeighbourhood();
+    await prisma.listingCategory.upsert({
+      where: { slug: CATEGORY_SLUG },
+      update: {},
+      create: { slug: CATEGORY_SLUG, label: 'Catégorie stats' },
+    });
     const resident = await signup(app, RESIDENT);
     residentId = resident.user.id;
     residentToken = resident.accessToken;
@@ -54,7 +61,7 @@ describe('Admin stats — participation counts', () => {
         neighbourhoodId: NEIGHBOURHOOD_ID,
         title: '__test__ stats listing',
         kind: 'offer',
-        category: 'test',
+        category: CATEGORY_SLUG,
         pricePoints: 0,
       });
     listingId = (listing.body as { _id: string })._id;
@@ -62,6 +69,7 @@ describe('Admin stats — participation counts', () => {
 
   afterAll(async () => {
     if (listingId) await ListingModel.deleteOne({ _id: listingId });
+    await prisma.listingCategory.deleteMany({ where: { slug: CATEGORY_SLUG } });
     const ids = [residentId, adminId].filter(Boolean);
     if (ids.length) {
       await prisma.session.deleteMany({ where: { userId: { in: ids } } });
