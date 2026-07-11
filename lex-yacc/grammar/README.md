@@ -33,7 +33,3 @@ régénérer en C (hors CI) :
 flex mongo-dsl.l
 bison -d mongo-dsl.y   # mongo-dsl.tab.h + mongo-dsl.tab.c
 ```
-
-Lier ce C dans Node nécessiterait une FFI — hors périmètre du projet, jison
-étant l'équivalent JS-natif à faible risque qui satisfait l'exigence "langage
-d'interrogation maison via lex/yacc" sans dépendance native.
