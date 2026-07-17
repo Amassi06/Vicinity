@@ -18,14 +18,21 @@ export function Modal({
   const t = useT();
   const dialogRef = useRef<HTMLDivElement>(null);
 
-  useEffect(() => {
-    dialogRef.current?.focus();
-    const onKeyDown = (event: KeyboardEvent): void => {
-      if (event.key === 'Escape') onClose();
-    };
-    document.addEventListener('keydown', onKeyDown);
-    return () => document.removeEventListener('keydown', onKeyDown);
-  }, [onClose]);
+useEffect(() => {
+  dialogRef.current?.focus();
+}, []);
+
+useEffect(() => {
+  const onKeyDown = (event: KeyboardEvent): void => {
+    if (event.key === 'Escape') onClose();
+  };
+
+  document.addEventListener('keydown', onKeyDown);
+
+  return () => {
+    document.removeEventListener('keydown', onKeyDown);
+  };
+}, [onClose]);
 
   return (
     <div
