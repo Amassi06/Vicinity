@@ -45,10 +45,10 @@ useEffect(() => {
         aria-modal="true"
         aria-label={title}
         tabIndex={-1}
-        className="animate-rise w-full max-w-lg rounded-xl border border-border bg-background p-6 shadow-2xl outline-none"
+        className="animate-rise flex max-h-[85vh] w-full max-w-lg flex-col rounded-xl border border-border bg-background p-6 shadow-2xl outline-none"
         onClick={(event) => event.stopPropagation()}
       >
-        <div className="mb-4 flex items-center justify-between gap-3">
+        <div className="mb-4 flex shrink-0 items-center justify-between gap-3">
           <h2 className="text-lg font-semibold">{title}</h2>
           <button
             type="button"
@@ -59,7 +59,7 @@ useEffect(() => {
             <X className="size-4" />
           </button>
         </div>
-        {children}
+        <div className="overflow-y-auto">{children}</div>
       </div>
     </div>
   );
