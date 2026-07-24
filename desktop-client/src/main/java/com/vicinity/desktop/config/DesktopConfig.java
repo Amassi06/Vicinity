@@ -34,7 +34,7 @@ public final class DesktopConfig {
             // garde les défauts
         }
         final String fromFile = props.getProperty(PROP_API_URL, "").trim();
-        final String fromJvm = System.getProperty("api-vicinity.aimassi.dev", "").trim();
+        final String fromJvm = System.getProperty("vicinity.api.url", "").trim();
         final String base =
                 !fromJvm.isEmpty() ? fromJvm : !fromFile.isEmpty() ? fromFile : DEFAULT_API_URL;
         return new DesktopConfig(normalizeBaseUrl(base));
