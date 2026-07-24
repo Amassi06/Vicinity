@@ -155,8 +155,13 @@ public final class IncidentsTab extends BorderPane {
         task.setOnFailed(
                 ev -> {
                     if (trigger != null) trigger.setDisable(false);
-                    status.setText("Échec sync : " + task.getException().getMessage());
                     loadFromCache();
+                    if (ApiException.isNetwork(task.getException())) {
+                        AppSession.markOffline();
+                        status.setText("Hors ligne — utilisation du cache local.");
+                    } else {
+                        status.setText("Échec sync : " + task.getException().getMessage());
+                    }
                 });
         Thread.ofVirtual().start(task);
     }
@@ -174,9 +179,7 @@ public final class IncidentsTab extends BorderPane {
 
     private void changeStatus(final Incident incident, final String newStatus) {
         if (AppSession.isOffline()) {
-            LocalStore.queueStatusChange(incident.id(), newStatus, incident.updatedAt());
-            status.setText("Hors ligne — changement mis en file, sera envoyé à la reconnexion.");
-            loadFromCache();
+            queueOffline(incident, newStatus);
             return;
         }
         final Task<Incident> task =
@@ -193,10 +196,23 @@ public final class IncidentsTab extends BorderPane {
                     if (err instanceof ApiException apiEx && apiEx.statusCode() == 409) {
                         status.setText("Conflit — l'incident a été modifié entre-temps, resynchronisation…");
                         syncFromApi(null);
+                    } else if (ApiException.isNetwork(err)) {
+                        // Réseau tombé sans que le mode hors-ligne soit encore
+                        // détecté : ne pas perdre le changement.
+                        AppSession.markOffline();
+                        queueOffline(incident, newStatus);
                     } else {
                         status.setText("Échec : " + (err == null ? "inconnu" : err.getMessage()));
                     }
                 });
         Thread.ofVirtual().start(task);
+    }
+
+    /** Enregistre le changement dans H2 (outbox + cache) ; SyncService le rejouera à la reconnexion. */
+    private void queueOffline(final Incident incident, final String newStatus) {
+        LocalStore.queueStatusChange(incident.id(), newStatus, incident.updatedAt());
+        LocalStore.applyLocalStatusChange(incident.id(), newStatus);
+        loadFromCache();
+        status.setText("Hors ligne — changement enregistré en local, il sera envoyé à la reconnexion.");
     }
 }

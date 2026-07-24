@@ -57,6 +57,19 @@ public final class MainView extends BorderPane {
                     homeTab.refreshStatic();
                     incidentsTab.reloadNeighbourhoods();
                 });
+        // Après chaque synchro automatique : mettre à jour le badge hors-ligne
+        // et rafraîchir les onglets depuis le cache H2 fraîchement rempli.
+        syncService.setOnTickCompleted(
+                () -> {
+                    final boolean offline = AppSession.isOffline();
+                    offlineBadge.setText("Hors ligne — cache local");
+                    offlineBadge.setVisible(offline);
+                    homeTab.refreshStatic();
+                    if (!offline) {
+                        neighbourhoodsTab.loadFromCache();
+                        incidentsTab.reloadNeighbourhoods();
+                    }
+                });
     }
 
     public void onShown() {

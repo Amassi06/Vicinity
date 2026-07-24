@@ -1,5 +1,6 @@
 package com.vicinity.desktop.ui.tabs;
 
+import com.vicinity.desktop.api.ApiException;
 import com.vicinity.desktop.api.VicinityApiClient;
 import com.vicinity.desktop.api.dto.Neighbourhood;
 import com.vicinity.desktop.api.dto.Stats;
@@ -132,6 +133,13 @@ public final class HomeTab extends VBox {
                 ev -> {
                     LocalStore.saveStats(neighbourhoodId, task.getValue());
                     showStats(task.getValue());
+                });
+        task.setOnFailed(
+                ev -> {
+                    if (ApiException.isNetwork(task.getException())) {
+                        AppSession.markOffline();
+                        refreshStatic();
+                    }
                 });
         Thread.ofVirtual().start(task);
     }

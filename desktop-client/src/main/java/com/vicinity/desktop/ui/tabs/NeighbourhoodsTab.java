@@ -1,5 +1,6 @@
 package com.vicinity.desktop.ui.tabs;
 
+import com.vicinity.desktop.api.ApiException;
 import com.vicinity.desktop.api.VicinityApiClient;
 import com.vicinity.desktop.api.dto.Neighbourhood;
 import com.vicinity.desktop.session.AppSession;
@@ -132,8 +133,13 @@ public final class NeighbourhoodsTab extends BorderPane {
         task.setOnFailed(
                 ev -> {
                     trigger.setDisable(false);
-                    status.setText("Échec sync : " + task.getException().getMessage());
                     loadFromCache();
+                    if (ApiException.isNetwork(task.getException())) {
+                        AppSession.markOffline();
+                        status.setText("Hors ligne — quartiers du cache local.");
+                    } else {
+                        status.setText("Échec sync : " + task.getException().getMessage());
+                    }
                 });
 
         Thread.ofVirtual().start(task);

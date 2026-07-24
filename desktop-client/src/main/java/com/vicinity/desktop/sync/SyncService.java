@@ -21,9 +21,15 @@ public final class SyncService {
 
     private final VicinityApiClient api;
     private ScheduledExecutorService executor;
+    private Runnable onTickCompleted;
 
     public SyncService(final VicinityApiClient api) {
         this.api = api;
+    }
+
+    /** Callback UI (thread JavaFX) après chaque tentative de synchro, réussie ou non. */
+    public void setOnTickCompleted(final Runnable callback) {
+        this.onTickCompleted = callback;
     }
 
     public void start() {
@@ -49,6 +55,10 @@ public final class SyncService {
         // Pas de garde isOffline() : on tente à chaque tick, c'est ce qui
         // permet de repasser en ligne quand le backend redevient joignable.
         try {
+            // La file d'abord : le pull écraserait le cache avec l'état serveur
+            // avant que les changements locaux en attente n'y soient poussés.
+            flushOutbox();
+
             final List<Neighbourhood> neighbourhoods = api.listNeighbourhoods();
             AppSession.markOnline();
             LocalStore.replaceNeighbourhoods(neighbourhoods);
@@ -58,10 +68,15 @@ public final class SyncService {
                 LocalStore.replaceIncidents(n.id(), incidents);
                 LocalStore.saveStats(n.id(), api.getStats(n.id()));
             }
-
-            flushOutbox();
-        } catch (Exception ignored) {
+        } catch (Exception e) {
             // best effort ; la prochaine synchro réessaiera
+            if (ApiException.isNetwork(e)) {
+                AppSession.markOffline();
+            }
+        } finally {
+            if (onTickCompleted != null) {
+                javafx.application.Platform.runLater(onTickCompleted);
+            }
         }
     }
 

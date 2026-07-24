@@ -323,6 +323,39 @@ public final class LocalStore {
         }
     }
 
+    /**
+     * Reflète immédiatement dans le cache un changement de statut mis en file
+     * hors-ligne, pour que l'UI affiche le nouveau statut sans attendre la
+     * synchro (le serveur reste la source de vérité au prochain pull).
+     */
+    public static void applyLocalStatusChange(final String incidentId, final String newStatus) {
+        try (Connection conn = connection()) {
+            final String payload;
+            try (PreparedStatement select =
+                    conn.prepareStatement("SELECT payload_json FROM incidents_cache WHERE id = ?")) {
+                select.setString(1, incidentId);
+                try (ResultSet rs = select.executeQuery()) {
+                    if (!rs.next()) {
+                        return;
+                    }
+                    payload = rs.getString("payload_json");
+                }
+            }
+            final var node = (com.fasterxml.jackson.databind.node.ObjectNode) MAPPER.readTree(payload);
+            node.put("status", newStatus);
+            try (PreparedStatement update =
+                    conn.prepareStatement(
+                            "UPDATE incidents_cache SET status = ?, payload_json = ? WHERE id = ?")) {
+                update.setString(1, newStatus);
+                update.setString(2, MAPPER.writeValueAsString(node));
+                update.setString(3, incidentId);
+                update.executeUpdate();
+            }
+        } catch (Exception e) {
+            throw new IllegalStateException("Impossible d'appliquer le changement local", e);
+        }
+    }
+
     public static List<OutboxEntry> loadOutbox() {
         final List<OutboxEntry> out = new ArrayList<>();
         try (Connection conn = connection();
