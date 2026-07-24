@@ -77,17 +77,6 @@ public final class VicinityApiClient {
                 NEIGHBOURHOOD_LIST);
     }
 
-    public JsonNode compileDsl(final String dsl) throws Exception {
-        final JsonNode root =
-                exchange(
-                        "POST",
-                        "/dsl/compile",
-                        Optional.of(Map.of("dsl", dsl)),
-                        true,
-                        JsonNode.class);
-        return root.get("compiled");
-    }
-
     public void adminCreditWallet(final String toUserId, final int amount, final String reason)
             throws Exception {
         exchange(
@@ -104,10 +93,6 @@ public final class VicinityApiClient {
 
     public JsonNode readyz() throws Exception {
         return exchange("GET", "/readyz", Optional.empty(), false, JsonNode.class);
-    }
-
-    public JsonNode getPluginsCatalog() throws Exception {
-        return exchange("GET", "/plugins", Optional.empty(), true, JsonNode.class);
     }
 
     public List<Incident> listIncidents(final String neighbourhoodId) throws Exception {

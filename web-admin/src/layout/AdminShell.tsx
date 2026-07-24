@@ -1,6 +1,6 @@
 import type { ReactElement } from 'react';
 import { NavLink, Navigate, Outlet } from 'react-router-dom';
-import { FileText, KeyRound, LogOut, Mail, MapPin, Plug, ShieldCheck, ShoppingBag, Tags, TriangleAlert, Wallet } from 'lucide-react';
+import { FileText, LogOut, Mail, MapPin, Plug, ShieldCheck, ShoppingBag, Tags, TriangleAlert, Wallet } from 'lucide-react';
 import { useAuth } from '../context/AuthContext.js';
 import { Button } from '@/components/ui/button.js';
 import { cn } from '@/lib/utils.js';
@@ -17,7 +17,6 @@ export function AdminShell(): ReactElement {
 
   const navItems = [
     { to: '/', end: true, icon: MapPin, label: 'Quartiers', show: true },
-    { to: '/dsl', icon: KeyRound, label: 'DSL', show: user?.role === 'ADMIN' || user?.role === 'MODERATOR' },
     { to: '/wallet', icon: Wallet, label: 'Crédit points', show: user?.role === 'ADMIN' },
     { to: '/documents', icon: FileText, label: 'Documents', show: true },
     { to: '/categories', icon: Tags, label: 'Catégories', show: user?.role === 'ADMIN' },

@@ -63,6 +63,11 @@ public final class AppSession {
         offlineMode = true;
     }
 
+    /** Rétablit le mode en ligne après un appel API réussi (le mode hors-ligne ne doit pas être définitif). */
+    public static void markOnline() {
+        offlineMode = false;
+    }
+
     public static void clear() {
         accessToken = null;
         refreshToken = null;
@@ -103,11 +108,4 @@ public final class AppSession {
         selectedNeighbourhoodId = id;
     }
 
-    public static boolean canUseDsl() {
-        if (currentUser == null) {
-            return false;
-        }
-        final String role = currentUser.role();
-        return "ADMIN".equals(role) || "MODERATOR".equals(role);
-    }
 }

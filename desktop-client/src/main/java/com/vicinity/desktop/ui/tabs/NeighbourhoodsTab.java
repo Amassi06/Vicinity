@@ -24,11 +24,17 @@ public final class NeighbourhoodsTab extends BorderPane {
     private final Label status = new Label();
     private final TableView<Neighbourhood> table = new TableView<>();
     private final TextArea detail = new TextArea();
+    private Runnable onSyncSucceeded;
 
     public NeighbourhoodsTab(final VicinityApiClient api) {
         this.api = api;
         build();
         loadFromCache();
+    }
+
+    /** Callback appelé après une synchro réussie (ex. rafraîchir le tableau de bord). */
+    public void setOnSyncSucceeded(final Runnable callback) {
+        this.onSyncSucceeded = callback;
     }
 
     private void build() {
@@ -97,10 +103,8 @@ public final class NeighbourhoodsTab extends BorderPane {
     }
 
     public void syncFromApi(final Button trigger) {
-        if (AppSession.isOffline()) {
-            status.setText("Hors ligne — utilisez le cache ou reconnectez-vous.");
-            return;
-        }
+        // On tente toujours l'appel, même marqué hors-ligne : c'est le moyen
+        // de se reconnecter quand le réseau/backend redevient disponible.
         trigger.setDisable(true);
         status.setText("Synchronisation…");
 
@@ -115,10 +119,14 @@ public final class NeighbourhoodsTab extends BorderPane {
         task.setOnSucceeded(
                 ev -> {
                     trigger.setDisable(false);
+                    AppSession.markOnline();
                     final List<Neighbourhood> items = task.getValue();
                     LocalStore.replaceNeighbourhoods(items);
                     table.setItems(FXCollections.observableArrayList(items));
                     status.setText(items.size() + " quartier(s) synchronisé(s).");
+                    if (onSyncSucceeded != null) {
+                        onSyncSucceeded.run();
+                    }
                 });
 
         task.setOnFailed(
@@ -128,7 +136,6 @@ public final class NeighbourhoodsTab extends BorderPane {
                     loadFromCache();
                 });
 
-        // fix duplicate markOffline - remove duplicate in onSucceeded
         Thread.ofVirtual().start(task);
     }
 

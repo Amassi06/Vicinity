@@ -3,7 +3,6 @@
   "already_signed": "This zone has already been signed.",
   "already_voted": "You have already voted on this poll.",
   "cannot_accept_own_listing": "You cannot accept your own listing.",
-  "dsl_parse_error": "Syntax error in the query.",
   "email_already_registered": "This email is already registered.",
   "empty_object": "No data provided.",
   "forbidden": "Action not allowed.",

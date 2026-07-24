@@ -1,4 +1,5 @@
 import { useEffect, useRef, type ReactElement, type ReactNode } from 'react';
+import { createPortal } from 'react-dom';
 import { X } from 'lucide-react';
 import { useT } from '../i18n/I18nContext.js';
 
@@ -34,9 +35,12 @@ useEffect(() => {
   };
 }, [onClose]);
 
-  return (
+  // Portal vers <body> : un ancêtre avec transform (ex. .animate-rise de
+  // l'AppShell) deviendrait sinon le référentiel du position:fixed et la
+  // modale se calerait sur la page au lieu du viewport.
+  return createPortal(
     <div
-      className="relative inset-0 z-50 flex items-center justify-center bg-black/60 p-4 backdrop-blur-sm"
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 backdrop-blur-sm"
       onClick={onClose}
     >
       <div
@@ -61,6 +65,7 @@ useEffect(() => {
         </div>
         <div className="overflow-y-auto">{children}</div>
       </div>
-    </div>
+    </div>,
+    document.body,
   );
 }

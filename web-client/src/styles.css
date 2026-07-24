@@ -175,5 +175,7 @@
   }
 }
 .animate-rise {
-  animation: vicinity-rise 0.35s ease both;
+  /* Pas de fill-mode : un transform retenu après l'animation ferait de
+     l'élément le containing block des descendants en position:fixed. */
+  animation: vicinity-rise 0.35s ease;
 }

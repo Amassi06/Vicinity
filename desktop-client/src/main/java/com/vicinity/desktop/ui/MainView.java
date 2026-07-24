@@ -1,11 +1,10 @@
 package com.vicinity.desktop.ui;
 
+import com.vicinity.desktop.api.ApiException;
 import com.vicinity.desktop.api.VicinityApiClient;
 import com.vicinity.desktop.api.dto.MeResponse;
 import com.vicinity.desktop.session.AppSession;
 import com.vicinity.desktop.ui.ThemeSupport;
-import com.vicinity.desktop.ui.tabs.DslTab;
-import com.vicinity.desktop.ui.tabs.PluginsTab;
 import com.vicinity.desktop.ui.tabs.HomeTab;
 import com.vicinity.desktop.ui.tabs.IncidentsTab;
 import com.vicinity.desktop.ui.tabs.NeighbourhoodsTab;
@@ -50,6 +49,14 @@ public final class MainView extends BorderPane {
         this.syncService = new SyncService(api);
         buildToolbar();
         buildTabs();
+        // Après une synchro réussie : rafraîchir le tableau de bord et le
+        // sélecteur de quartier des incidents, et masquer le badge hors-ligne.
+        neighbourhoodsTab.setOnSyncSucceeded(
+                () -> {
+                    offlineBadge.setVisible(false);
+                    homeTab.refreshStatic();
+                    incidentsTab.reloadNeighbourhoods();
+                });
     }
 
     public void onShown() {
@@ -85,10 +92,6 @@ public final class MainView extends BorderPane {
                 final String next = ThemeSupport.toggle(getScene());
                 themeBadge.setText("Thème : " + next);
             });
-
-        final Button syncBtn = new Button("Sync quartiers");
-        syncBtn.getStyleClass().add("button-secondary");
-        syncBtn.setOnAction(e -> neighbourhoodsTab.syncFromApi(syncBtn));
 
         final ColorPicker accentPicker = new ColorPicker();
         try {
@@ -134,7 +137,6 @@ public final class MainView extends BorderPane {
                         themeBtn,
                         accentPicker,
                         fontSpinner,
-                        syncBtn,
                         uninstallBtn,
                         logoutBtn);
         bar.setAlignment(Pos.CENTER_LEFT);
@@ -152,20 +154,12 @@ public final class MainView extends BorderPane {
         final Tab hoods = new Tab("Quartiers", neighbourhoodsTab);
         final Tab incidents = new Tab("Incidents", incidentsTab);
         final Tab wallet = new Tab("Portefeuille", new WalletTab(api));
-        final Tab dsl = new Tab("DSL", new DslTab(api));
-        final Tab plugins = new Tab("Plugins", new PluginsTab(api));
 
-        tabs.getTabs().addAll(home, hoods, incidents, wallet, dsl, plugins);
+        tabs.getTabs().addAll(home, hoods, incidents, wallet);
         setCenter(tabs);
     }
 
     private void refreshSessionOnline() {
-        if (AppSession.isOffline()) {
-            offlineBadge.setVisible(true);
-            offlineBadge.setText("Hors ligne");
-            return;
-        }
-
         final Task<MeResponse> task =
                 new Task<>() {
                     @Override
@@ -183,6 +177,14 @@ public final class MainView extends BorderPane {
 
         task.setOnFailed(
                 ev -> {
+                    final Throwable err = task.getException();
+                    if (err instanceof ApiException apiErr && apiErr.statusCode() == 401) {
+                        // Session expirée (refresh impossible) : retour à la connexion
+                        // plutôt qu'un mode hors-ligne dont on ne sort jamais.
+                        AppSession.clear();
+                        onLogout.run();
+                        return;
+                    }
                     AppSession.markOffline();
                     offlineBadge.setVisible(true);
                     offlineBadge.setText("Hors ligne — cache local");

@@ -3,6 +3,21 @@
     -fx-font-size: 13px;
     -fx-background-color: #0f172a;
     -fx-accent: #38bdf8;
+    /* Variables Modena : propagent le mode sombre à TOUS les contrôles
+       (labels sans classe, tableaux, combos, champs de saisie, spinners…). */
+    -fx-base: #1e293b;
+    -fx-background: #0f172a;
+    -fx-control-inner-background: #111827;
+    -fx-control-inner-background-alt: #0b1220;
+    -fx-text-base-color: #e2e8f0;
+    -fx-text-background-color: #e2e8f0;
+    -fx-text-inner-color: #e2e8f0;
+    -fx-focus-color: #38bdf8;
+    -fx-faint-focus-color: #38bdf822;
+}
+
+.label {
+    -fx-text-fill: #e2e8f0;
 }
 
 .label-title {

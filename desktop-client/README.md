@@ -1,7 +1,7 @@
 # desktop-client Vicinity
 
 Client **JavaFX 21** pour administrateurs / modérateurs : connexion API, cache
-**H2** hors-ligne des quartiers, crédit portefeuille (ADMIN), compilateur DSL.
+**H2** hors-ligne des quartiers, crédit portefeuille (ADMIN).
 
 ## Prérequis
 
@@ -24,6 +24,7 @@ Autre URL API :
 ./gradlew run -Dvicinity.api.url=http://192.168.1.10:3000
 ```
 
+
 Ou fichier `~/.vicinity/config.properties` :
 
 ```properties
@@ -38,7 +39,6 @@ api.url=http://localhost:3000
 | **Accueil** | Profil, mode en ligne / hors ligne, test `healthz` / `readyz` |
 | **Quartiers** | Liste synchronisée depuis `GET /neighbourhoods`, cache H2 |
 | **Portefeuille** | `POST /admin/wallet/credit` (rôle ADMIN) |
-| **DSL** | `POST /dsl/compile` (MODERATOR / ADMIN) |
 
 ### Données locales
 
@@ -65,7 +65,7 @@ api.url=http://localhost:3000
 | `Task 'run' not found` | `./gradlew run` |
 | **`HTTP/1.1 header parser received no bytes`** | Backend **non démarré** ou **mauvaise URL** (souvent `:5173` au lieu de `:3000`) |
 | Connexion refusée | `make up` puis `cd backend && npm run dev` |
-| `forbidden` sur DSL / wallet | Promouvoir le rôle en base (`users.role`) |
+| `forbidden` sur wallet | Promouvoir le rôle en base (`users.role`) |
 | Pas d’affichage | Environnement graphique (X11 / Wayland) requis |
 
 L’API Express écoute sur **`http://localhost:3000`**, pas sur les ports Vite (5173 / 5174).

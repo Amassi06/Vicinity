@@ -24,7 +24,9 @@ java {
 }
 
 application {
-    mainClass.set("com.vicinity.desktop.VicinityApp")
+    // Launcher (sans héritage d'Application) : évite le contrôle strict des
+    // modules JavaFX par le lanceur Java pour le jar shadow.
+    mainClass.set("com.vicinity.desktop.Launcher")
     applicationDefaultJvmArgs = listOf(
         "-Dvicinity.api.url=http://localhost:3000",
     )
@@ -45,7 +47,7 @@ tasks.named<JavaExec>("run") {
 
 tasks.shadowJar {
     manifest {
-        attributes["Main-Class"] = "com.vicinity.desktop.VicinityApp"
+        attributes["Main-Class"] = "com.vicinity.desktop.Launcher"
     }
     archiveClassifier.set("")
 }

@@ -39,14 +39,6 @@ public final class LoginView extends VBox {
         final Label title = new Label("Vicinity — Bureau admin");
         title.getStyleClass().add("label-title");
 
-        final Text subtitle =
-                new Text(
-                        "Connexion à l’API "
-                                + config.apiBaseUrl()
-                                + (config.looksLikeWebDevServer()
-                                        ? "\n⚠ Port 5173/5174 = front React, pas l’API !"
-                                        : "")
-                                + "\nSession locale : ~/.vicinity/");
 
         final TextField email = new TextField();
         email.setPromptText("email@exemple.fr");
@@ -130,7 +122,6 @@ public final class LoginView extends VBox {
         getChildren()
                 .addAll(
                         title,
-                        subtitle,
                         grid,
                         loginBtn,
                         ssoBtn,

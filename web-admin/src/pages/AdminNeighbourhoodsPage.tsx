@@ -257,11 +257,7 @@ export function AdminNeighbourhoodsPage(): ReactElement {
   return (
     <div className="flex min-h-[calc(100vh-52px)]">
       <aside className="w-[min(340px,38vw)] shrink-0 overflow-auto border-r border-border bg-background/60 p-4">
-        <h1 className="mt-0 text-lg font-semibold">Quartiers (PostGIS)</h1>
-        <p className="text-sm text-muted-foreground">
-          Modélisation par polygones GeoJSON. La carte reste cantonnée aux périmètres (ou à votre
-          position pour le premier tracé).
-        </p>
+        <h1 className="mt-0 text-lg font-semibold">Quartiers</h1>
         {user ? (
           <p className="my-3 rounded-md border border-border bg-background px-2.5 py-1.5 text-sm">
             Connecté : {user.email} — rôle <Badge variant="secondary">{user.role}</Badge>

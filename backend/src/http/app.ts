@@ -15,7 +15,6 @@ import './routes/events.js';
 import './routes/messages.js';
 import './routes/message-attachments.js';
 import './routes/polls.js';
-import './routes/dsl.js';
 import './routes/gdpr.js';
 import './routes/plugins.js';
 import './routes/incidents.js';

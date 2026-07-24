@@ -111,7 +111,8 @@ public final class IncidentsTab extends BorderPane {
         setCenter(center);
     }
 
-    private void reloadNeighbourhoods() {
+    /** Recharge la liste des quartiers depuis le cache H2 (appelé aussi après chaque synchro réussie). */
+    public void reloadNeighbourhoods() {
         final List<Neighbourhood> items = LocalStore.loadNeighbourhoods();
         neighbourhoodBox.setItems(FXCollections.observableArrayList(items));
         final String selectedId = AppSession.selectedNeighbourhoodId();

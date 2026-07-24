@@ -46,11 +46,11 @@ public final class SyncService {
     }
 
     private void tick() {
-        if (AppSession.isOffline()) {
-            return;
-        }
+        // Pas de garde isOffline() : on tente à chaque tick, c'est ce qui
+        // permet de repasser en ligne quand le backend redevient joignable.
         try {
             final List<Neighbourhood> neighbourhoods = api.listNeighbourhoods();
+            AppSession.markOnline();
             LocalStore.replaceNeighbourhoods(neighbourhoods);
 
             for (final Neighbourhood n : neighbourhoods) {

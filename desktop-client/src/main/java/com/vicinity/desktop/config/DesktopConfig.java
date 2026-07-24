@@ -11,7 +11,7 @@ import java.util.Properties;
 public final class DesktopConfig {
 
     private static final String PROP_API_URL = "api.url";
-    private static final String DEFAULT_API_URL = "http://localhost:3000";
+    private static final String DEFAULT_API_URL = "https://api-vicinity.aimassi.dev";
 
     private final String apiBaseUrl;
 

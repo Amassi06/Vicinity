@@ -9,10 +9,8 @@ import com.vicinity.desktop.store.LocalStore;
 import javafx.collections.FXCollections;
 import javafx.concurrent.Task;
 import javafx.geometry.Insets;
-import javafx.scene.control.Button;
 import javafx.scene.control.ComboBox;
 import javafx.scene.control.Label;
-import javafx.scene.control.TextArea;
 import javafx.scene.layout.GridPane;
 import javafx.scene.layout.HBox;
 import javafx.scene.layout.VBox;
@@ -28,7 +26,6 @@ public final class HomeTab extends VBox {
     private final Label cacheLine = new Label();
     private final Label cacheCountLine = new Label();
     private final Label syncStateLine = new Label();
-    private final TextArea healthArea = new TextArea();
     private final ComboBox<Neighbourhood> neighbourhoodBox = new ComboBox<>();
     private final Label statsListings = new Label("—");
     private final Label statsEvents = new Label("—");
@@ -68,15 +65,6 @@ public final class HomeTab extends VBox {
         stats.add(syncStateLine, 1, 3);
         stats.getStyleClass().add("panel");
         stats.setPadding(new Insets(12));
-
-        healthArea.setEditable(false);
-        healthArea.setWrapText(true);
-        healthArea.getStyleClass().add("text-area-mono");
-        healthArea.setPrefRowCount(10);
-
-        final Button probeBtn = new Button("Tester l’API (healthz / readyz)");
-        probeBtn.getStyleClass().add("button-secondary");
-        probeBtn.setOnAction(e -> probeHealth(probeBtn));
 
         neighbourhoodBox.setConverter(
                 new StringConverter<>() {
@@ -125,9 +113,7 @@ public final class HomeTab extends VBox {
                         modeLine,
                         stats,
                         participationHeader,
-                        participation,
-                        probeBtn,
-                        healthArea);
+                        participation);
     }
 
     private void refreshParticipationStats(final String neighbourhoodId) {
@@ -195,35 +181,4 @@ public final class HomeTab extends VBox {
         syncStateLine.setText(AppSession.isOffline() ? "Hors ligne" : "Connecté");
     }
 
-    private void probeHealth(final Button btn) {
-        btn.setDisable(true);
-        healthArea.setText("Interrogation…");
-        final Task<String> task =
-                new Task<>() {
-                    @Override
-                    protected String call() throws Exception {
-                        final var hz = api.healthz();
-                        final var rz = api.readyz();
-                        return "GET /healthz\n" + hz + "\n\nGET /readyz\n" + rz;
-                    }
-                };
-        task.setOnSucceeded(
-                ev -> {
-                    healthArea.setText(task.getValue());
-                    btn.setDisable(false);
-                });
-        task.setOnFailed(
-                ev -> {
-                    final Throwable err = task.getException();
-                    healthArea.setText(
-                            "Échec : "
-                                    + (err == null
-                                            ? "inconnu"
-                                            : err.getMessage() == null
-                                                    ? err.getClass().getSimpleName()
-                                                    : err.getMessage()));
-                    btn.setDisable(false);
-                });
-        Thread.ofVirtual().start(task);
-    }
 }
